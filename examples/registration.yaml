@@ -1,0 +1,15 @@
+# Application service registration for homeservers that read a file (Synapse:
+# app_service_config_files). Use the same tokens as the appservice's environment
+# (openssl rand -hex 32); the appservice refuses to start with these placeholders.
+id: matrix-for-ai
+url: http://appservice:7701
+as_token: CHANGE_ME_AS_TOKEN
+hs_token: CHANGE_ME_HS_TOKEN
+sender_localpart: matrix-for-ai
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@ai_.*:example\\.org"
+  rooms: []
+  aliases: []

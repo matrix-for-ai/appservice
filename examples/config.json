@@ -1,0 +1,23 @@
+{
+  "homeserver": {
+    "url": "http://homeserver:6167",
+    "server_name": "example.org"
+  },
+  "appservice": {
+    "id": "matrix-for-ai",
+    "as_token": "${MATRIX_AS_TOKEN}",
+    "hs_token": "${MATRIX_HS_TOKEN}",
+    "e2ee": true
+  },
+  "listen": "0.0.0.0:7700",
+  "appservice_listen": "0.0.0.0:7701",
+  "admin_token": "${AI_API_ADMIN_TOKEN}",
+  "webhooks": {
+    "allowed_targets": [
+      "10.0.0.0/8:*",
+      "172.16.0.0/12:*",
+      "192.168.0.0/16:*",
+      "169.254.1.2:*"
+    ]
+  }
+}

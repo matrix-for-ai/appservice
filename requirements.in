@@ -1,0 +1,6 @@
+# Ranges admit only releases that keep compatibility, by each project's own policy;
+# the lock pins the exact build. Floors are the versions last tested.
+aiohttp>=3.14.5,<4                  # declares semver
+matrix-nio[e2e]>=0.26.0,<0.27       # 0.x: no declared policy, so patch updates only
+pycryptodome>=4.4.0,<5              # Ed25519 for cross-signing; removals only in major releases
+yarl>=1.25.1,<2                     # builds homeserver URLs by segment; removals only in major releases

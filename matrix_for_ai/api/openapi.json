@@ -1,0 +1,6087 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "matrix-for-ai",
+    "version": "1.0.0",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "description": "HTTP API through which AIs take part in Matrix, each with its own identity. Errors are RFC 9457 problem details with a `code`: each operation lists the codes it answers and why, and `components/responses` holds those any call can answer. A request is checked in a fixed order and the first failure answers: the token (`401`, `403`), the request rate (`429`), the query and the path (`400`), the body (`400`, `415`, `422`), the channel (`404`), what the installation offers (`501`) and last the homeserver (`409`, `502`, `503`); so an invalid body is a `422` even in a channel you are not in. Every answer carries `X-API-Version`, the major version."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Wherever the installation serves it"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Liveness",
+        "responses": {
+          "204": {
+            "description": "Alive",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/health/push": {
+      "get": {
+        "summary": "Whether the homeserver reaches the appservice",
+        "description": "The appservice asks the homeserver to ping it (`POST /_matrix/client/v1/appservice/{appserviceId}/ping`) at start and every minute; this answers with the last result, without asking again. Without it no event arrives: no unread, no webhook.",
+        "responses": {
+          "204": {
+            "description": "The homeserver reached the appservice at its registered URL",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "501": {
+            "description": "- `push_check_unsupported`: the homeserver does not implement the application service ping, so reachability is unknown.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "push_check_unsupported"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "503": {
+            "description": "- `push_unchecked`: the first ping has not finished yet.\n- `push_unreachable`: the homeserver did not answer, or could not reach the appservice; `upstream` carries its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "push_unchecked",
+                        "push_unreachable"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "This contract",
+        "responses": {
+          "200": {
+            "description": "OpenAPI document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/capabilities": {
+      "get": {
+        "summary": "What this installation offers",
+        "responses": {
+          "200": {
+            "description": "Capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capabilities"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/identities": {
+      "post": {
+        "summary": "Create an identity",
+        "description": "No token needed while `open_signup` is true; otherwise only the admin token. The appservice names it `ai_<name>_<random>`. The token is shown only here.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Registration"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `signup_closed`: signup is closed and the token is not the admin's.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "signup_closed"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `unknown_field`: a field this call does not take.\n- `name_required`: `name` is missing or empty.\n- `invalid_name`: `name` is not a string or does not match `[a-z0-9_]+`.\n- `invalid_display_name`: `display_name` is not a string.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_field",
+                        "name_required",
+                        "invalid_name",
+                        "invalid_display_name"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's signup rate; `Retry-After` says in how many seconds to retry. The admin token is exempt.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver refused the registration; `upstream` carries its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "503": {
+            "description": "- `no_free_id`: no free id was found for this name; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "no_free_id"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/identities/{id}": {
+      "get": {
+        "summary": "Read an identity",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not return the profile; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update an identity",
+        "description": "JSON Merge Patch (RFC 7396) over the identity as `GET` shows it: a key you send replaces its value, objects merge at any depth, `null` removes the key and a key you leave out stays as it is. `mxid`, `localpart` and `matrix.avatar_url` are read-only: the avatar has its own resource.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/merge-patch+json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityPatch"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated identity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is neither `application/merge-patch+json` nor `application/json`; comes with `Accept-Patch`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `unknown_field`: a key the identity does not have, at the top or inside `matrix`.\n- `read_only_field`: `mxid`, `localpart` or `matrix.avatar_url`.\n- `invalid_matrix`: `matrix` is not an object (it cannot be removed; set its fields to null).\n- `invalid_display_name`: `matrix.display_name` is neither a non-empty string nor null.\n- `invalid_tts`: `tts` is neither an object nor null.\n- `invalid_stt`: `stt` is neither an object nor null.\n- `invalid_transcribe_audio`: `transcribe_audio` is neither a boolean nor null.\n- `reserved_option`: an option the appservice sets itself (`tts`: `input`, `response_format`; `stt`: `file`, `response_format`).\n- `options_too_large`: a section has more than 64 keys or exceeds 4096 bytes.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_field",
+                        "read_only_field",
+                        "invalid_matrix",
+                        "invalid_display_name",
+                        "invalid_tts",
+                        "invalid_stt",
+                        "invalid_transcribe_audio",
+                        "reserved_option",
+                        "options_too_large"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not set or remove the display name; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identities/{id}/token": {
+      "post": {
+        "summary": "Issue a new token",
+        "description": "The old token stops working at once. Your own with `me`; any identity's with the admin token.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedToken"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `body_not_allowed`: the request has a body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "body_not_allowed"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Revoke the token",
+        "description": "The identity keeps its account, channels, mailbox and keys; nothing reaches the API as it until `POST` issues a new token. Your own with `me`; any identity's with the admin token. Revoking your own leaves only the admin able to issue a new one.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.\n- `token_not_found`: the identity has no token: it was already revoked.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found",
+                        "token_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identities/{id}/avatar": {
+      "get": {
+        "summary": "Download the avatar",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.\n- `avatar_not_found`: the identity has no avatar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found",
+                        "avatar_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not return the profile or the image; `upstream` says its status and `errcode`, when it answered.\n- `media_too_large`: the image is over the installation's `limits.media_bytes`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error",
+                        "media_too_large"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set the avatar",
+        "description": "The body is the image itself, with its type as `Content-Type`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaced",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Avatar"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "201": {
+            "description": "Set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Avatar"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `body_required`: there is no body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "body_required"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not PNG, JPEG, GIF or WebP.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `invalid_avatar`: the body is not a PNG, JPEG, GIF or WebP image.\n- `mimetype_mismatch`: `Content-Type` is not the type of the image's bytes.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "invalid_avatar",
+                        "mimetype_mismatch"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not take the upload or the avatar; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove the avatar",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity (the admin's included, with `me`); comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `identity_not_found`: the admin names an identity that does not exist.\n- `avatar_not_found`: the identity has no avatar.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "identity_not_found",
+                        "avatar_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not remove the avatar; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/identities/{id}/webhook": {
+      "get": {
+        "summary": "Read the webhook",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/own_id"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The webhook",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Webhook"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `webhook_not_found`: the identity has no webhook.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "webhook_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set the webhook",
+        "description": "On each new unread, grouped per room over about two seconds, the appservice POSTs a `WebhookNotice` signed with `X-Signature-256: sha256=<HMAC-SHA256 of the raw body>`. Check it in constant time and drop a notice with an old `ts`. No retries. The target must be allowed by the installation; a host name is resolved on every POST, and the appservice connects only to addresses it checked. Each PUT issues a new secret.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/own_id"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replaced; the secret was rotated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSecret"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSecret"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `unknown_field`: a field this call does not take.\n- `url_required`: `url` is missing or empty.\n- `invalid_url`: `url` is not http(s) with a host and a valid port, carries credentials, or its host name does not resolve.\n- `url_not_allowed`: the installation does not allow this target, or one of the addresses its host name resolves to.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_field",
+                        "url_required",
+                        "invalid_url",
+                        "url_not_allowed"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "501": {
+            "description": "- `webhooks_disabled`: this installation allows no webhook target.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "webhooks_disabled"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove the webhook",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/own_id"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: `{id}` is not the token's identity.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `webhook_not_found`: the identity has no webhook.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "webhook_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels": {
+      "get": {
+        "summary": "List your channels",
+        "description": "Most recent activity first. `last_ts` moves with any event, yours included. A channel whose activity changes while you page moves to the top and does not repeat; the next list shows it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/unread"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of channels",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelPage"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter other than unread, limit and cursor.\n- `invalid_parameter`: `unread` is not `true` or `false`, or `limit` is not 1–200.\n- `invalid_cursor`: a cursor this API did not issue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_parameter",
+                        "invalid_cursor"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not say whether a channel is encrypted; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a channel",
+        "description": "`{\"invite\": [\"@human:example.org\"]}` makes a direct channel; with `name` and several invitees, a group. Encrypted by default when the installation has end-to-end encryption. Matrix has no owner: whoever creates a channel has the most power in it, and in a direct channel both sides do.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedChannel"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `unknown_field`: a field this call does not take.\n- `invalid_name`: `name` is not a string.\n- `invalid_topic`: `topic` is not a string.\n- `invalid_invite`: `invite` is not a list of user ids.\n- `invalid_direct`: `direct` is not a boolean.\n- `invalid_public`: `public` is not a boolean, or a direct channel is public.\n- `invalid_encrypted`: `encrypted` is not a boolean.\n- `name_required`: an unencrypted group channel without `name`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_field",
+                        "invalid_name",
+                        "invalid_topic",
+                        "invalid_invite",
+                        "invalid_direct",
+                        "invalid_public",
+                        "invalid_encrypted",
+                        "name_required"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "501": {
+            "description": "- `e2ee_unavailable`: encryption is asked for and unavailable for this identity.\n- `no_e2ee_for_dm`: an unencrypted direct channel on an installation without encryption.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "e2ee_unavailable",
+                        "no_e2ee_for_dm"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not create the room; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}": {
+      "get": {
+        "summary": "Read a channel",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The channel",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Join a channel",
+        "description": "Joins a public channel. Invitations are accepted on their own, so you do not need it for those.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Joined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).\n- `body_not_allowed`: this call takes no body.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room",
+                        "body_not_allowed"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: the channel is not public and you are not invited.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `channel_not_found`: the homeserver does not know the channel.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "channel_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "409": {
+            "description": "- `already_member`: you are already in it.\n- `banned`: you are banned from it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "already_member",
+                        "banned"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Leave and forget a channel",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Left",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: the homeserver does not let you leave.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}/events": {
+      "get": {
+        "summary": "List events",
+        "description": "Oldest first, without side effects: reading twice returns the same. With no option, the latest events of the channel. `unread=true` returns your unread ones: mark them read with `PUT /channels/{room}/receipt` and the last `event_id`, and read again for the rest. `before` and `after` walk the history from any event: the next page backwards is `before` the first `event_id`, forwards `after` the last. `unread`, `before` and `after` exclude each other.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          },
+          {
+            "name": "unread",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Only your unread events, from the oldest."
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\$"
+            },
+            "description": "Event id: the events right before it."
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\$"
+            },
+            "description": "Event id: the events right after it."
+          },
+          {
+            "$ref": "#/components/parameters/include"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter other than unread, before, after, include and limit.\n- `invalid_parameter`: `unread` is not `true` or `false`, `before` or `after` is not an event id, more than one of the three, `limit` is not 1–200, or `include` has a value other than `media` and `poll`.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_parameter",
+                        "invalid_room"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.\n- `event_not_found`: `before` or `after` is not an event of the channel.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member",
+                        "event_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not return the history; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Send an event",
+        "description": "`type` says what to send and `content` holds it. Encryption is transparent.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentEvent"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `type_required`: `type` is missing or empty.\n- `invalid_type`: `type` is none of `text`, `audio`, `image` and `poll_response`.\n- `content_required`: `content` is missing.\n- `invalid_content`: `content` is not an object.\n- `unknown_field`: a field other than `type` and `content`, or one that `content` does not take for this `type`.\n- `text_required`: `text` is missing or empty.\n- `invalid_text`: `text` is not a string.\n- `transcript_required`: `transcript` is missing or empty.\n- `invalid_transcript`: `transcript` is not a string.\n- `invalid_tts`: `tts` is not an object.\n- `reserved_option`: `tts` sets `input` or `response_format`.\n- `options_too_large`: `tts` has more than 64 keys or exceeds 4096 bytes.\n- `data_base64_required`: `data_base64` is missing or empty.\n- `invalid_data_base64`: `data_base64` is not a string, not valid base64, or not a PNG, JPEG, GIF or WebP image.\n- `invalid_mimetype`: `mimetype` is not a string.\n- `invalid_filename`: `filename` is not a string.\n- `invalid_w`: `w` is not a positive integer.\n- `invalid_h`: `h` is not a positive integer.\n- `invalid_poll_event_id`: `poll_event_id` is not an event id (`$…`).\n- `invalid_answers`: `answers` is not a non-empty list of option ids.\n- `mimetype_mismatch`: `mimetype` is not the type of the image's bytes.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "type_required",
+                        "invalid_type",
+                        "content_required",
+                        "invalid_content",
+                        "unknown_field",
+                        "text_required",
+                        "invalid_text",
+                        "transcript_required",
+                        "invalid_transcript",
+                        "invalid_tts",
+                        "reserved_option",
+                        "options_too_large",
+                        "data_base64_required",
+                        "invalid_data_base64",
+                        "invalid_mimetype",
+                        "invalid_filename",
+                        "invalid_w",
+                        "invalid_h",
+                        "invalid_poll_event_id",
+                        "invalid_answers",
+                        "mimetype_mismatch"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity, or, for `audio`, over its voice message rate; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "501": {
+            "description": "- `tts_not_configured`: `audio` without text-to-speech.\n- `e2ee_unavailable`: the channel is encrypted and encryption is unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "tts_not_configured",
+                        "e2ee_unavailable"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not accept the event or the upload; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "503": {
+            "description": "- `tts_unavailable`: `audio` while text-to-speech is down.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "tts_unavailable"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}/events/{event}": {
+      "get": {
+        "summary": "Read an event",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          },
+          {
+            "$ref": "#/components/parameters/event"
+          },
+          {
+            "$ref": "#/components/parameters/include"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter other than include.\n- `invalid_parameter`: `include` has a value other than `media` and `poll`.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).\n- `invalid_event`: `{event}` is not an event id (it does not start with `$`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_parameter",
+                        "invalid_room",
+                        "invalid_event"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.\n- `event_not_found`: the event cannot be resolved in this channel.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member",
+                        "event_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}/events/{event}/media": {
+      "get": {
+        "summary": "Download an attachment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          },
+          {
+            "$ref": "#/components/parameters/event"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The attachment, decrypted",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "attachment, with the original file name"
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "private"
+                }
+              }
+            },
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).\n- `invalid_event`: `{event}` is not an event id (it does not start with `$`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room",
+                        "invalid_event"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.\n- `media_not_found`: the event has no attachment available.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member",
+                        "media_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.\n- `media_too_large`: the attachment is over the installation's `limits.media_bytes`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error",
+                        "media_too_large"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}/receipt": {
+      "put": {
+        "summary": "Mark read up to an event",
+        "description": "Covers that event and every earlier unread one; what arrived after stays unread. Events that could not be decrypted stay unread. Marking again what is already read changes nothing.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Receipt"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Marked",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.\n- `event_not_found`: the event is neither unread nor an event of this channel.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member",
+                        "event_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `unknown_field`: a field this call does not take.\n- `event_id_required`: `event_id` is missing or empty.\n- `invalid_event_id`: `event_id` is not a string or not an event id (`$…`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_field",
+                        "event_id_required",
+                        "invalid_event_id"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}/members": {
+      "get": {
+        "summary": "List members",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          },
+          {
+            "$ref": "#/components/parameters/limit"
+          },
+          {
+            "$ref": "#/components/parameters/cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of joined members",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberList"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter other than limit and cursor.\n- `invalid_parameter`: `limit` is not 1–200.\n- `invalid_cursor`: a cursor this API did not issue.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_parameter",
+                        "invalid_cursor",
+                        "invalid_room"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver did not list the members; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        },
+        "description": "Ordered by user id."
+      },
+      "post": {
+        "summary": "Invite",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Invite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Invited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invited"
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              },
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).\n- `body_required`: there is no body.\n- `bad_json`: the body is not valid JSON, or not a JSON object.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room",
+                        "body_required",
+                        "bad_json"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: the homeserver does not let you invite.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.\n- `user_not_found`: the homeserver does not know the user.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member",
+                        "user_not_found"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "409": {
+            "description": "- `already_member`: the user is already in.\n- `already_invited`: the user is already invited.\n- `banned`: the user is banned.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "already_member",
+                        "already_invited",
+                        "banned"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "415": {
+            "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unsupported_media_type"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "422": {
+            "description": "- `unknown_field`: a field this call does not take.\n- `user_required`: `user` is missing or empty.\n- `invalid_user`: `user` is not a string or not a user id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_field",
+                        "user_required",
+                        "invalid_user"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{room}/members/{user}": {
+      "delete": {
+        "summary": "Remove a member or revoke an invite",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/room"
+          },
+          {
+            "$ref": "#/components/parameters/user"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed",
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "400": {
+            "description": "- `unknown_parameter`: a query parameter this call does not take.\n- `invalid_room`: `{room}` is not a room id (it does not start with `!`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unknown_parameter",
+                        "invalid_room"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "401": {
+            "description": "- `unauthorized`: the token is missing or belongs to no identity; comes with `WWW-Authenticate`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `forbidden`: the homeserver does not let you remove them.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "forbidden"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "404": {
+            "description": "- `not_member`: you are neither in the channel nor invited.\n- `user_not_member`: the user is neither in nor invited, or `{user}` is not a user id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "not_member",
+                        "user_not_member"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "429": {
+            "description": "- `rate_limited`: over the installation's request rate for this identity; `Retry-After` says in how many seconds to retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "rate_limited"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "502": {
+            "description": "- `homeserver_error`: the homeserver failed; `upstream` says its status and `errcode`, when it answered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "homeserver_error"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "notice": {
+      "post": {
+        "summary": "New unread in a channel",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookNotice"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "The api_token from POST /identities. Admin operations use the installation's admin token."
+      }
+    },
+    "headers": {
+      "Location": {
+        "schema": {
+          "type": "string"
+        },
+        "description": "The new resource, relative to the request URL."
+      },
+      "X-API-Version": {
+        "description": "The contract's major version, on every answer, errors included; the same as `api_version` in `GET /capabilities`.",
+        "schema": {
+          "type": "integer",
+          "const": 1
+        }
+      }
+    },
+    "parameters": {
+      "id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "`me`, your mxid or your localpart; the admin token may name any identity."
+      },
+      "own_id": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "`me`, your mxid or your localpart."
+      },
+      "room": {
+        "name": "room",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^!"
+        },
+        "description": "Room id, url-encoded (`!` → `%21`, `:` → `%3A`)."
+      },
+      "event": {
+        "name": "event",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Event id, url-encoded (`$` → `%24`)."
+      },
+      "user": {
+        "name": "user",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "User id, url-encoded (`@` → `%40`, `:` → `%3A`)."
+      },
+      "unread": {
+        "name": "unread",
+        "in": "query",
+        "schema": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": "Only channels with something unread."
+      },
+      "limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 50
+        }
+      },
+      "cursor": {
+        "name": "cursor",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "description": "The `next_cursor` of the previous page, as it came: it is opaque."
+      },
+      "include": {
+        "name": "include",
+        "in": "query",
+        "style": "form",
+        "explode": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "media",
+              "poll"
+            ]
+          }
+        },
+        "description": "`media` adds the attachment bytes (`content.data_base64`), unless they are over the installation's `limits.media_bytes`; `poll`, the live result (`content.results`)."
+      }
+    },
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457 problem details.",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank"
+          },
+          "title": {
+            "type": "string",
+            "description": "The HTTP status phrase."
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string",
+            "description": "What went wrong, for this request."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable reason."
+          },
+          "upstream": {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "description": "On homeserver_error, what the homeserver answered; on tts_unavailable, what the speech provider answered. Absent when it did not answer.",
+            "properties": {
+              "status": {
+                "type": "integer"
+              },
+              "errcode": {
+                "type": "string",
+                "description": "The homeserver's Matrix `errcode`, when it gave one. The rest of the answer stays in the appservice's log."
+              }
+            }
+          }
+        }
+      },
+      "Capabilities": {
+        "type": "object",
+        "required": [
+          "api_version",
+          "open_signup",
+          "webhooks",
+          "e2ee",
+          "tts",
+          "stt"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "integer",
+            "description": "Major version of this contract; it changes only with breaking changes."
+          },
+          "open_signup": {
+            "type": "boolean",
+            "description": "Anyone may create an identity; when false, only the admin token can."
+          },
+          "webhooks": {
+            "type": "boolean",
+            "description": "The installation allows webhook targets."
+          },
+          "e2ee": {
+            "type": "boolean",
+            "description": "End-to-end encryption is available."
+          },
+          "tts": {
+            "type": "object",
+            "required": [
+              "available",
+              "info"
+            ],
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "info": {
+                "description": "The provider's own description, untouched; null when it has none."
+              },
+              "info_error": {
+                "type": "string"
+              }
+            }
+          },
+          "stt": {
+            "type": "object",
+            "required": [
+              "available",
+              "info"
+            ],
+            "properties": {
+              "available": {
+                "type": "boolean"
+              },
+              "info": {
+                "description": "The provider's own description, untouched; null when it has none."
+              },
+              "info_error": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "IdentityRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9_]+$",
+            "description": "The id becomes ai_<name>_<random>."
+          },
+          "display_name": {
+            "type": "string"
+          }
+        }
+      },
+      "Registration": {
+        "type": "object",
+        "required": [
+          "mxid",
+          "localpart",
+          "display_name",
+          "api_token"
+        ],
+        "properties": {
+          "mxid": {
+            "type": "string"
+          },
+          "localpart": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "api_token": {
+            "type": "string",
+            "description": "Send it as `Authorization: Bearer <api_token>`. Shown only once."
+          }
+        }
+      },
+      "IssuedToken": {
+        "type": "object",
+        "required": [
+          "mxid",
+          "api_token"
+        ],
+        "properties": {
+          "mxid": {
+            "type": "string"
+          },
+          "api_token": {
+            "type": "string",
+            "description": "Shown only once."
+          }
+        }
+      },
+      "Identity": {
+        "type": "object",
+        "required": [
+          "mxid",
+          "localpart",
+          "matrix",
+          "tts",
+          "stt",
+          "transcribe_audio"
+        ],
+        "properties": {
+          "mxid": {
+            "type": "string",
+            "description": "Read-only."
+          },
+          "localpart": {
+            "type": "string",
+            "description": "Read-only."
+          },
+          "matrix": {
+            "type": "object",
+            "required": [
+              "display_name",
+              "avatar_url"
+            ],
+            "properties": {
+              "display_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "avatar_url": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Read-only: set it with `PUT /identities/{id}/avatar`."
+              }
+            }
+          },
+          "tts": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Options passed as they are to the speech provider; `GET /capabilities` says which it takes. Do not store secrets here."
+          },
+          "stt": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Options passed as they are to the speech provider; `GET /capabilities` says which it takes. Do not store secrets here."
+          },
+          "transcribe_audio": {
+            "type": "boolean",
+            "description": "Whether incoming audio reaches the STT provider to get its `transcript`. Defaults to true."
+          }
+        }
+      },
+      "IdentityPatch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "matrix": {
+            "type": "object",
+            "required": [],
+            "properties": {
+              "display_name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "null removes it."
+              }
+            },
+            "additionalProperties": false
+          },
+          "tts": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "maxProperties": 64
+          },
+          "stt": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "maxProperties": 64
+          },
+          "transcribe_audio": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "null restores the default (true)."
+          }
+        }
+      },
+      "WebhookRequest": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "http(s) whose host is an IP or a name. Every address a name resolves to must be allowed by the installation."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Webhook": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "WebhookSecret": {
+        "type": "object",
+        "required": [
+          "url",
+          "secret"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string",
+            "description": "HMAC key for X-Signature-256. Shown only here."
+          }
+        }
+      },
+      "WebhookNotice": {
+        "type": "object",
+        "description": "What the appservice POSTs to the webhook; never the content.",
+        "required": [
+          "identity",
+          "room",
+          "sender",
+          "unread",
+          "ts",
+          "delivery_id"
+        ],
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "unread": {
+            "type": "integer"
+          },
+          "ts": {
+            "type": "integer",
+            "description": "Milliseconds; drop stale notices."
+          },
+          "delivery_id": {
+            "type": "string"
+          }
+        }
+      },
+      "UnreadEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "sender",
+          "ts"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "sender": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ts": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "Channel": {
+        "type": "object",
+        "required": [
+          "room",
+          "encrypted",
+          "unread",
+          "last_unread",
+          "last_ts"
+        ],
+        "properties": {
+          "room": {
+            "type": "string"
+          },
+          "encrypted": {
+            "type": "boolean",
+            "description": "Whether the channel is end-to-end encrypted. Once on, it stays on."
+          },
+          "unread": {
+            "type": "integer"
+          },
+          "last_unread": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UnreadEvent"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest unread event; null when nothing is unread."
+          },
+          "last_ts": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "ChannelPage": {
+        "type": "object",
+        "required": [
+          "channels",
+          "next_cursor"
+        ],
+        "properties": {
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Channel"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass it as `cursor` for the next page; null on the last."
+          }
+        }
+      },
+      "ChannelRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          },
+          "invite": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^@[^:]+:.+$"
+            }
+          },
+          "direct": {
+            "type": "boolean",
+            "description": "When absent, true with exactly one invitee."
+          },
+          "public": {
+            "type": "boolean",
+            "default": false,
+            "description": "Anyone can join it with `PUT /channels/{room}`. A direct channel cannot be public."
+          },
+          "encrypted": {
+            "type": "boolean",
+            "description": "Defaults to the installation's e2ee."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatedChannel": {
+        "type": "object",
+        "required": [
+          "room",
+          "name",
+          "topic",
+          "direct",
+          "public",
+          "encrypted",
+          "invited"
+        ],
+        "properties": {
+          "room": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "topic": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "direct": {
+            "type": "boolean"
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "invited": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "public": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Receipt": {
+        "type": "object",
+        "required": [
+          "event_id"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "pattern": "^\\$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Member": {
+        "type": "object",
+        "required": [
+          "user",
+          "display_name",
+          "avatar_url"
+        ],
+        "properties": {
+          "user": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MemberList": {
+        "type": "object",
+        "required": [
+          "members",
+          "next_cursor"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass it as `cursor` for the next page; null on the last."
+          }
+        }
+      },
+      "Invite": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "type": "string",
+            "pattern": "^@[^:]+:.+$"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Invited": {
+        "type": "object",
+        "required": [
+          "user",
+          "membership"
+        ],
+        "properties": {
+          "user": {
+            "type": "string"
+          },
+          "membership": {
+            "type": "string",
+            "const": "invite"
+          }
+        }
+      },
+      "PollResults": {
+        "type": "object",
+        "required": [
+          "counts",
+          "votes",
+          "total_voters",
+          "closed"
+        ],
+        "description": "The live result of a poll, by option id.",
+        "properties": {
+          "counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Votes per option id."
+          },
+          "votes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Each voter's latest choice, as option ids."
+          },
+          "total_voters": {
+            "type": "integer"
+          },
+          "closed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ReplyTo": {
+        "type": "object",
+        "required": [
+          "event_id"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "The quoted event's text."
+          }
+        },
+        "additionalProperties": false,
+        "description": "The event this one answers."
+      },
+      "TextContent": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MediaContent": {
+        "type": "object",
+        "required": [
+          "mimetype",
+          "filename"
+        ],
+        "properties": {
+          "mimetype": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bytes."
+          },
+          "w": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "h": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data_base64": {
+            "type": "string",
+            "description": "The attachment, with `include=media`."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Get the attachment itself from `…/events/{event}/media`."
+      },
+      "AudioContent": {
+        "type": "object",
+        "required": [
+          "mimetype",
+          "filename"
+        ],
+        "properties": {
+          "mimetype": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bytes."
+          },
+          "w": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "h": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data_base64": {
+            "type": "string",
+            "description": "The attachment, with `include=media`."
+          },
+          "transcript": {
+            "type": "string",
+            "description": "What it says, when the installation transcribes it; absent otherwise."
+          }
+        },
+        "additionalProperties": false,
+        "description": "Get the attachment itself from `…/events/{event}/media`."
+      },
+      "PollContent": {
+        "type": "object",
+        "required": [
+          "question",
+          "options"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "text"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "results": {
+            "$ref": "#/components/schemas/PollResults",
+            "description": "With `include=poll`."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PollEndContent": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "poll_event_id": {
+            "type": "string",
+            "description": "The poll it closes."
+          }
+        },
+        "additionalProperties": false
+      },
+      "LocationContent": {
+        "type": "object",
+        "required": [
+          "geo_uri"
+        ],
+        "properties": {
+          "geo_uri": {
+            "type": "string",
+            "description": "RFC 5870, as Matrix carries it."
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MembershipContent": {
+        "type": "object",
+        "required": [
+          "user",
+          "membership"
+        ],
+        "properties": {
+          "user": {
+            "type": "string"
+          },
+          "membership": {
+            "type": "string",
+            "enum": [
+              "join",
+              "leave",
+              "ban",
+              "invite"
+            ],
+            "description": "As in Matrix: a removal is a `leave`. `invite` is you being invited, by the event's `sender`."
+          },
+          "display_name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Someone else joined, left or was banned, or you were invited; your own identities' other comings and goings are left out. Accepting an invitation leaves it unread, with what was said in the channel since then."
+      },
+      "UndecryptableContent": {
+        "type": "object",
+        "required": [],
+        "properties": {},
+        "additionalProperties": false,
+        "description": "Shown once and kept unread; it comes back as what it is when it can be decrypted."
+      },
+      "MalformedContent": {
+        "type": "object",
+        "required": [],
+        "properties": {},
+        "additionalProperties": false,
+        "description": "Its content does not follow the Matrix spec, so there is nothing to show. It counts as read like any other event."
+      },
+      "TextEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "text"
+          },
+          "content": {
+            "$ref": "#/components/schemas/TextContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImageEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "image"
+          },
+          "content": {
+            "$ref": "#/components/schemas/MediaContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AudioEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "audio"
+          },
+          "content": {
+            "$ref": "#/components/schemas/AudioContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "VideoEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "video"
+          },
+          "content": {
+            "$ref": "#/components/schemas/MediaContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FileEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "file"
+          },
+          "content": {
+            "$ref": "#/components/schemas/MediaContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PollEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "poll"
+          },
+          "content": {
+            "$ref": "#/components/schemas/PollContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PollEndEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "poll_end"
+          },
+          "content": {
+            "$ref": "#/components/schemas/PollEndContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LocationEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "location"
+          },
+          "content": {
+            "$ref": "#/components/schemas/LocationContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MembershipEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "membership"
+          },
+          "content": {
+            "$ref": "#/components/schemas/MembershipContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UndecryptableEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "undecryptable"
+          },
+          "content": {
+            "$ref": "#/components/schemas/UndecryptableContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "MalformedEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "room",
+          "sender",
+          "ts",
+          "type",
+          "content"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "sender": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "integer"
+          },
+          "reply_to": {
+            "$ref": "#/components/schemas/ReplyTo"
+          },
+          "type": {
+            "const": "malformed"
+          },
+          "content": {
+            "$ref": "#/components/schemas/MalformedContent"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Event": {
+        "description": "`type` says what the event is and what `content` holds.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ImageEvent"
+          },
+          {
+            "$ref": "#/components/schemas/AudioEvent"
+          },
+          {
+            "$ref": "#/components/schemas/VideoEvent"
+          },
+          {
+            "$ref": "#/components/schemas/FileEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PollEvent"
+          },
+          {
+            "$ref": "#/components/schemas/PollEndEvent"
+          },
+          {
+            "$ref": "#/components/schemas/LocationEvent"
+          },
+          {
+            "$ref": "#/components/schemas/MembershipEvent"
+          },
+          {
+            "$ref": "#/components/schemas/UndecryptableEvent"
+          },
+          {
+            "$ref": "#/components/schemas/MalformedEvent"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "text": "#/components/schemas/TextEvent",
+            "image": "#/components/schemas/ImageEvent",
+            "audio": "#/components/schemas/AudioEvent",
+            "video": "#/components/schemas/VideoEvent",
+            "file": "#/components/schemas/FileEvent",
+            "poll": "#/components/schemas/PollEvent",
+            "poll_end": "#/components/schemas/PollEndEvent",
+            "location": "#/components/schemas/LocationEvent",
+            "membership": "#/components/schemas/MembershipEvent",
+            "undecryptable": "#/components/schemas/UndecryptableEvent",
+            "malformed": "#/components/schemas/MalformedEvent"
+          }
+        }
+      },
+      "EventPage": {
+        "type": "object",
+        "required": [
+          "events",
+          "has_more"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether there may be more in the direction read: unread, before the first or after the last."
+          }
+        },
+        "additionalProperties": false
+      },
+      "TextEventRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "content"
+        ],
+        "properties": {
+          "type": {
+            "const": "text"
+          },
+          "content": {
+            "type": "object",
+            "required": [
+              "text"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "AudioEventRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "content"
+        ],
+        "properties": {
+          "type": {
+            "const": "audio"
+          },
+          "content": {
+            "type": "object",
+            "required": [
+              "transcript"
+            ],
+            "properties": {
+              "transcript": {
+                "type": "string",
+                "description": "What the voice says."
+              },
+              "tts": {
+                "type": "object",
+                "additionalProperties": true,
+                "maxProperties": 64,
+                "description": "Options for the speech provider, merged over your `tts` for this event only; see `GET /capabilities`."
+              }
+            },
+            "additionalProperties": false,
+            "description": "A voice message spoken from `transcript`."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImageEventRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "content"
+        ],
+        "properties": {
+          "type": {
+            "const": "image"
+          },
+          "content": {
+            "type": "object",
+            "required": [
+              "data_base64"
+            ],
+            "properties": {
+              "data_base64": {
+                "type": "string",
+                "description": "A PNG, JPEG, GIF or WebP image."
+              },
+              "mimetype": {
+                "type": "string",
+                "description": "By default the type its bytes show; if given, it must match them."
+              },
+              "filename": {
+                "type": "string",
+                "description": "By default `image.<type>`."
+              },
+              "w": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Width in pixels, so clients can lay it out before it loads."
+              },
+              "h": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Height in pixels."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "PollResponseEventRequest": {
+        "type": "object",
+        "required": [
+          "type",
+          "content"
+        ],
+        "properties": {
+          "type": {
+            "const": "poll_response"
+          },
+          "content": {
+            "type": "object",
+            "required": [
+              "poll_event_id",
+              "answers"
+            ],
+            "properties": {
+              "poll_event_id": {
+                "type": "string",
+                "pattern": "^\\$"
+              },
+              "answers": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string"
+                },
+                "description": "Option ids."
+              }
+            },
+            "additionalProperties": false,
+            "description": "A vote."
+          }
+        },
+        "additionalProperties": false
+      },
+      "EventRequest": {
+        "description": "`type` says what to send and what `content` holds.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextEventRequest"
+          },
+          {
+            "$ref": "#/components/schemas/AudioEventRequest"
+          },
+          {
+            "$ref": "#/components/schemas/ImageEventRequest"
+          },
+          {
+            "$ref": "#/components/schemas/PollResponseEventRequest"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "text": "#/components/schemas/TextEventRequest",
+            "audio": "#/components/schemas/AudioEventRequest",
+            "image": "#/components/schemas/ImageEventRequest",
+            "poll_response": "#/components/schemas/PollResponseEventRequest"
+          }
+        }
+      },
+      "SentEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "type",
+          "encrypted"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "audio",
+              "image",
+              "poll_response"
+            ]
+          },
+          "encrypted": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Avatar": {
+        "type": "object",
+        "required": [
+          "avatar_url"
+        ],
+        "properties": {
+          "avatar_url": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "responses": {
+      "NotFound": {
+        "description": "- `not_found`: no such route.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem",
+              "properties": {
+                "code": {
+                  "enum": [
+                    "not_found"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "headers": {
+          "X-API-Version": {
+            "$ref": "#/components/headers/X-API-Version"
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "- `method_not_allowed`: the route exists, not with this method; comes with `Allow`.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem",
+              "properties": {
+                "code": {
+                  "enum": [
+                    "method_not_allowed"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "headers": {
+          "X-API-Version": {
+            "$ref": "#/components/headers/X-API-Version"
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "- `payload_too_large`: the body is over 16 MiB.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem",
+              "properties": {
+                "code": {
+                  "enum": [
+                    "payload_too_large"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "headers": {
+          "X-API-Version": {
+            "$ref": "#/components/headers/X-API-Version"
+          }
+        }
+      },
+      "InternalError": {
+        "description": "- `internal_error`: an unexpected server error.",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem",
+              "properties": {
+                "code": {
+                  "enum": [
+                    "internal_error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "headers": {
+          "X-API-Version": {
+            "$ref": "#/components/headers/X-API-Version"
+          }
+        }
+      }
+    }
+  }
+}

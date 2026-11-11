@@ -1,0 +1,42 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - run: docker build --target test .
+
+  e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Start homeserver and appservice
+        working-directory: examples
+        run: |
+          for name in MATRIX_AS_TOKEN MATRIX_HS_TOKEN AI_API_ADMIN_TOKEN; do
+            echo "$name=$(openssl rand -hex 32)"
+          done > .env
+          docker compose up -d --build
+          for _ in $(seq 60); do
+            curl -fsS localhost:7700/capabilities && exit 0
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Live tests
+        run: |
+          docker build -t matrix-for-ai-test --target test .
+          docker run --rm --network host -e MATRIX_FOR_AI_E2E_URL=http://127.0.0.1:7700 \
+            matrix-for-ai-test python -m pytest -q -p no:cacheprovider tests/e2e
+      - name: Logs
+        if: failure()
+        working-directory: examples
+        run: docker compose logs

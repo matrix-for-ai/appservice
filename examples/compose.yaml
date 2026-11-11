@@ -1,0 +1,54 @@
+services:
+  homeserver:
+    image: ghcr.io/matrix-construct/tuwunel@sha256:0e86c6164d6c9f5b60291938eb61ad8395021c37fe58d47a963ea7edddbedaec
+    command: ["-c", "/etc/tuwunel/tuwunel.toml"]
+    environment:
+      TUWUNEL_APPSERVICE__matrix-for-ai__AS_TOKEN: ${MATRIX_AS_TOKEN}
+      TUWUNEL_APPSERVICE__matrix-for-ai__HS_TOKEN: ${MATRIX_HS_TOKEN}
+      TUWUNEL_ADMIN_EXECUTE: '["users create-user ${YOUR_USERNAME} ${YOUR_PASSWORD}"]'
+    volumes:
+      - ./homeserver.toml:/etc/tuwunel/tuwunel.toml:ro
+      - homeserver-data:/var/lib/tuwunel
+    ports:
+      - "127.0.0.1:8008:6167"
+    networks:
+      - matrix
+
+  appservice:
+    # config.json sets appservice_listen to 0.0.0.0:7701: the homeserver runs in another
+    # container and pushes events to that port over the compose network, never published.
+    build: ..
+    env_file: .env
+    volumes:
+      - ./config.json:/etc/matrix-for-ai/config.json:ro
+      - appservice-data:/data
+    ports:
+      - "127.0.0.1:7700:7700"
+    extra_hosts:
+      # your machine, where the CLI receives webhooks: Docker needs this line, Podman has it already
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - homeserver
+    networks:
+      matrix:
+        # tuwunel resolves the appservice URL once; a fixed address survives restarts
+        ipv4_address: 172.30.77.10
+
+  element:
+    image: docker.io/vectorim/element-web@sha256:e906aa6f08b702405464034a8dce33fa2c5ce55def4f71b1887d2df10336bbbd
+    environment:
+      ELEMENT_WEB_PORT: 8080
+    volumes:
+      - ./element.json:/app/config.json:ro
+    ports:
+      - "127.0.0.1:7780:8080"
+
+networks:
+  matrix:
+    ipam:
+      config:
+        - subnet: 172.30.77.0/24
+
+volumes:
+  homeserver-data:
+  appservice-data:

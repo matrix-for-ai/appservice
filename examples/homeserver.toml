@@ -1,0 +1,19 @@
+[global]
+server_name = "example.org"
+database_path = "/var/lib/tuwunel"
+address = ["0.0.0.0"]
+port = [6167]
+allow_registration = false
+allow_federation = false
+new_user_displayname_suffix = ""
+# the startup commands (your account) run on every start; once it exists, its error is ignored
+admin_execute_errors_ignore = true
+
+[global.appservice.matrix-for-ai]
+url = "http://appservice:7701"
+sender_localpart = "matrix-for-ai"
+rate_limited = false
+
+[[global.appservice.matrix-for-ai.users]]
+exclusive = true
+regex = "@ai_.*:example\\.org"
