@@ -1,77 +1,13 @@
-import asyncio
 import base64
-import os
-import secrets
-import time
 from urllib.parse import quote
 
 import aiohttp
 import pytest
 
-BASE_URL = os.environ.get("MATRIX_FOR_AI_E2E_URL", "").rstrip("/")
+from live import BASE_URL, PNG, Identity, homeserver_reaches_appservice, leave, pair
+
 pytestmark = pytest.mark.skipif(
     not BASE_URL, reason="set MATRIX_FOR_AI_E2E_URL to run against a running appservice")
-TIMEOUT_SECONDS = float(os.environ.get("MATRIX_FOR_AI_E2E_TIMEOUT", "30"))
-PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
-
-
-class Identity:
-    def __init__(self, session: aiohttp.ClientSession, mxid: str, token: str) -> None:
-        self.session = session
-        self.mxid = mxid
-        self.headers = {"Authorization": f"Bearer {token}"}
-
-    async def call(self, method: str, path: str, expect: int = 200, **kwargs):
-        async with self.session.request(
-                method, BASE_URL + path, headers=self.headers, **kwargs) as response:
-            body = await response.read()
-            assert response.status == expect, f"{method} {path} -> {response.status}: {body[:300]!r}"
-            if response.content_type == "application/json":
-                return await response.json()
-            return body
-
-    async def wait_for_events(self, room: str, count: int = 1) -> list:
-        received = []
-        deadline = time.monotonic() + TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            channel = f"/channels/{quote(room, safe='')}"
-            read = await self.call("GET", f"{channel}/events?unread=true&include=media,poll")
-            if read["events"]:
-                await self.call("PUT", f"{channel}/receipt", expect=204,
-                                json={"event_id": read["events"][-1]["event_id"]})
-            received += [m for m in read["events"] if m["type"] != "membership"]
-            if len(received) >= count:
-                return received
-            await asyncio.sleep(1)
-        raise AssertionError(f"{self.mxid} got {received} in {room}, expected {count}")
-
-    async def wait_until_member(self, room: str, other: str) -> None:
-        deadline = time.monotonic() + TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            members = await self.call("GET", f"/channels/{quote(room, safe='')}/members")
-            if other in [member["user"] for member in members["members"]]:
-                return
-            await asyncio.sleep(1)
-        raise AssertionError(f"{other} never joined {room}")
-
-    async def send(self, room: str, payload: dict) -> dict:
-        return await self.call(
-            "POST", f"/channels/{quote(room, safe='')}/events", expect=201, json=payload)
-
-
-@pytest.fixture
-async def pair():
-    async with aiohttp.ClientSession() as session:
-        run = secrets.token_hex(3)
-        identities = []
-        for role in ("alice", "bob"):
-            async with session.post(
-                    f"{BASE_URL}/identities", json={"name": f"e2e_{role}_{run}"}) as response:
-                assert response.status == 201, await response.text()
-                body = await response.json()
-            identities.append(Identity(session, body["mxid"], body["api_token"]))
-        yield identities
 
 
 async def _converse(alice: Identity, bob: Identity, room: str, *, encrypted: bool) -> None:
@@ -126,7 +62,7 @@ async def test_clear_group_conversation(pair):
     try:
         await _converse(alice, bob, created["room"], encrypted=False)
     finally:
-        await _leave(created["room"], alice, bob)
+        await leave(created["room"], alice, bob)
 
 
 async def test_encrypted_dm_both_ways(pair):
@@ -139,7 +75,7 @@ async def test_encrypted_dm_both_ways(pair):
     try:
         await _converse(alice, bob, created["room"], encrypted=True)
     finally:
-        await _leave(created["room"], alice, bob)
+        await leave(created["room"], alice, bob)
 
 
 async def test_voice_round_trip(pair):
@@ -161,9 +97,6 @@ async def test_voice_round_trip(pair):
         transcribed = bool(voice["content"].get("transcript"))
         assert transcribed is capabilities["stt"]["available"], voice
     finally:
-        await _leave(room, alice, bob)
+        await leave(room, alice, bob)
 
 
-async def _leave(room: str, *identities: Identity) -> None:
-    for identity in identities:
-        await identity.call("DELETE", f"/channels/{quote(room, safe='')}", expect=204)

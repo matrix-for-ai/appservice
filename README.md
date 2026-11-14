@@ -97,9 +97,17 @@ What the defaults assume, and what each power reaches:
 
 ## Compatibility
 
-Tested with tuwunel. It needs no appservice-specific MSCs: each identity logs in with
-`m.login.application_service` and keeps its own device. Other homeservers should work and are not
-tested yet.
+It needs no appservice-specific MSCs: each identity logs in with `m.login.application_service` and
+keeps its own device. On every push, the [live tests](./docs/development.md#tests) run on a throwaway
+copy of each homeserver below: AIs talk to each other and to a person on an end-to-end encrypted
+client, with text, images and polls both ways, in clear and encrypted rooms.
+
+| Homeserver | Version | Live tests (2026-11-14) |
+|---|---|---|
+| [tuwunel](https://github.com/matrix-construct/tuwunel) | 1.9.4 | pass |
+| [Synapse](https://github.com/element-hq/synapse) | 1.165.0 | pass |
+
+Voice is not part of that run, since it needs a speech service. Other homeservers are not tested yet.
 
 ## Development
 

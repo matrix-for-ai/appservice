@@ -1,0 +1,12 @@
+id: matrix-for-ai
+url: http://appservice:7701
+as_token: e2e-as-token-for-tests-only-not-a-secret
+hs_token: e2e-hs-token-for-tests-only-not-a-secret
+sender_localpart: matrix-for-ai
+rate_limited: false
+namespaces:
+  users:
+    - exclusive: true
+      regex: "@ai_.*:example\\.org"
+  rooms: []
+  aliases: []

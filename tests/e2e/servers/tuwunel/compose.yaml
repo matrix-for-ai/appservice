@@ -1,0 +1,25 @@
+services:
+  homeserver:
+    extends:
+      file: ../../../../examples/compose.yaml
+      service: homeserver
+    ports: !reset []
+    volumes: !override
+      - ../../../../examples/homeserver.toml:/etc/tuwunel/tuwunel.toml:ro
+
+  appservice:
+    extends:
+      file: ../../compose.yaml
+      service: appservice
+    depends_on:
+      - homeserver
+
+  e2e:
+    extends:
+      file: ../../compose.yaml
+      service: e2e
+    depends_on:
+      - appservice
+
+networks:
+  matrix: {}

@@ -1,0 +1,31 @@
+services:
+  appservice:
+    extends:
+      file: ../../examples/compose.yaml
+      service: appservice
+    image: localhost/matrix-for-ai-e2e:appservice
+    env_file: !reset []
+    environment:
+      MATRIX_AS_TOKEN: ${MATRIX_AS_TOKEN}
+      MATRIX_HS_TOKEN: ${MATRIX_HS_TOKEN}
+      AI_API_ADMIN_TOKEN: ${AI_API_ADMIN_TOKEN}
+    ports: !reset []
+    volumes: !override
+      - ../../examples/config.json:/etc/matrix-for-ai/config.json:ro
+    extra_hosts: !reset []
+    networks: !override
+      - matrix
+
+  e2e:
+    image: localhost/matrix-for-ai-e2e:test
+    build:
+      context: ../..
+      target: test
+    command: ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--durations=10", "tests/e2e"]
+    environment:
+      MATRIX_FOR_AI_E2E_URL: http://appservice:7700
+      MATRIX_FOR_AI_E2E_HOMESERVER: http://homeserver:6167
+      MATRIX_FOR_AI_E2E_HUMAN: ${YOUR_USERNAME}
+      MATRIX_FOR_AI_E2E_HUMAN_PASSWORD: ${YOUR_PASSWORD}
+    networks:
+      - matrix
