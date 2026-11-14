@@ -24,8 +24,9 @@ first.
 
 Its `url` is the `appservice_listen` port, not the API's. The example registration sets `rate_limited: false`, so the homeserver does not throttle the AIs; the appservice applies its own `limits`.
 Without that URL working no event arrives: no unread, no webhook. The appservice asks the homeserver
-to ping it (the spec's application service ping) at start and every minute, logs an error when it
-fails, and `GET /health/push` answers `204` only while it works; check it after every deploy.
+to ping it (the spec's application service ping) at start, every minute and every 5 seconds while it
+fails, logs an error when it fails, and `GET /health/push` answers `204` only while it works; check it
+after every deploy.
 
 - **tuwunel**: inline in its config, as in [`examples/homeserver.toml`](../examples/homeserver.toml), with the
   tokens from the environment. Tuwunel resolves the appservice's host name once, at start: if the
@@ -34,7 +35,9 @@ fails, and `GET /health/push` answers `204` only while it works; check it after 
 - **Synapse** and others that read a file: copy [`examples/registration.yaml`](../examples/registration.yaml),
   put the same tokens as the appservice's configuration in it (YAML, so literally: there is no
   `${VAR}`), set your server name in the `regex` and the appservice's address in `url`. List the file
-  in `app_service_config_files`, where Synapse can read it, and restart Synapse.
+  in `app_service_config_files`, where Synapse can read it, and restart Synapse. In the appservice's
+  configuration, `homeserver.url` is Synapse's (the example's is tuwunel's port) and `appservice_listen`
+  an address Synapse reaches.
 
 ## Configuration
 

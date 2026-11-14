@@ -10,6 +10,7 @@ from fakes import AS_TOKEN, HS_TOKEN
 from matrix_for_ai.__main__ import _catch_up_when_homeserver_ready, _checked_every
 from matrix_for_ai.adapters.matrix_appservice_transport import MatrixAppserviceTransport
 from matrix_for_ai.ports.matrix_transport import PushCheck
+from matrix_for_ai.services.push_reachability import PushReachability
 
 PROBLEM = "application/problem+json"
 
@@ -106,7 +107,7 @@ async def test_a_periodic_check_that_fails_keeps_running():
         if len(calls) == 1:
             raise RuntimeError("first check fails")
 
-    context = _checked_every(flaky_check, 0)(None)
+    context = _checked_every(flaky_check, lambda: 0)(None)
     await context.__anext__()
     for _ in range(10):
         await asyncio.sleep(0)
@@ -140,3 +141,23 @@ async def test_catching_up_waits_for_the_homeserver_even_without_identities(make
     assert not attempt.done()
     del appservice.transport.failing["list_supported_versions"]
     await asyncio.wait_for(attempt, timeout=5)
+
+
+async def test_a_failing_ping_is_retried_sooner_until_it_works():
+    unreachable = PushCheck(supported=True, reachable=False, status=None)
+    unsupported = PushCheck(supported=False, reachable=False, status=404)
+    answers = [unreachable, fakes.PUSH_CHECK, unsupported]
+
+    class Transport:
+        async def ping_from_homeserver(self, *, appservice_id):
+            return answers.pop(0)
+
+    async def recovered():
+        pass
+    reachability = PushReachability(transport=Transport(), appservice_id="test",
+                                    on_recovered=recovered)
+    failing = [reachability.failing]
+    for _ in range(3):
+        await reachability.check()
+        failing.append(reachability.failing)
+    assert failing == [False, True, False, False]

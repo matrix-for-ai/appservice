@@ -27,10 +27,12 @@ docker run --rm --network host -e MATRIX_FOR_AI_E2E_URL=http://127.0.0.1:7700 \
 `run.sh SERVER` brings up `tests/e2e/servers/SERVER/` with its own Docker Compose, pinned by digest so
 that every run uses the same one. It waits until every container is healthy, runs the live tests inside
 its network, restarts the appservice to check that what arrives while it is down stays unread, and
-removes everything. It needs Docker, or Podman with its socket on and `CONTAINER_ENGINE=podman`. Nothing
-is published on the host, so it does not clash with what already runs there; its network is
-`172.30.78.0/24`, so one run at a time. The tuwunel setup is [`examples/`](../examples) itself with test
-tokens; another homeserver is one more folder with its `compose.yaml` and `test.env`.
+removes everything. It needs Docker, or Podman with its socket on and `CONTAINER_ENGINE=podman`;
+rootless Podman cannot run health checks in containers made through its Docker API, so there it only
+waits for them to start. Nothing is published on the host, so it does not clash with what already runs
+there; its network is `172.30.78.0/24`, so one run at a time. The tuwunel setup is
+[`examples/`](../examples) itself with test tokens; another homeserver is one more folder with its
+`compose.yaml` and `test.env`.
 
 The live tests create throwaway identities. Two AIs talk in a clear group and an encrypted DM. A
 person, a regular account on an end-to-end encrypted client, exchanges text, images and a poll with an
