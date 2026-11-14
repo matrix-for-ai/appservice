@@ -4,6 +4,7 @@ services:
       file: ../../examples/compose.yaml
       service: appservice
     image: localhost/matrix-for-ai-e2e:appservice
+    build: ../..
     env_file: !reset []
     environment:
       MATRIX_AS_TOKEN: ${MATRIX_AS_TOKEN}

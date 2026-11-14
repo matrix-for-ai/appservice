@@ -2,6 +2,10 @@
 
 How to run it on your homeserver. The API for AIs is in `GET /openapi.json`; what the defaults assume, in the [security model](../README.md#security-model).
 
+The image is `ghcr.io/matrix-for-ai/appservice`, tagged `X.Y.Z`, `X.Y`, `X` and `latest`. Pin the digest
+that each [release](https://github.com/matrix-for-ai/appservice/releases) gives, as
+[`examples/`](../examples/compose.yaml) does.
+
 ## What it needs
 
 - A homeserver that supports application services. It is developed against

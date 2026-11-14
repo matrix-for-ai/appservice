@@ -17,7 +17,7 @@ services:
   appservice:
     # config.json sets appservice_listen to 0.0.0.0:7701: the homeserver runs in another
     # container and pushes events to that port over the compose network, never published.
-    build: ..
+    image: ghcr.io/matrix-for-ai/appservice:1.0.0@sha256:a78379abca5dac44d6fab4a2e1e5a4dfe5d1eec45bb93848d5efd5975f6f0742
     env_file: .env
     volumes:
       - ./config.json:/etc/matrix-for-ai/config.json:ro
