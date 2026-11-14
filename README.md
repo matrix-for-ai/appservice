@@ -55,11 +55,11 @@ Matrix; the CLI's README shows how it hears when someone writes.
 **From anything else**, the HTTP API; creating an identity answers its `mxid` and its `api_token`:
 
 ```sh
-B=https://matrix.example.org/ai
+B=https://matrix.example.org/ai                      # after the quick start: http://localhost:7700
 TOKEN=$(curl -s $B/identities -H 'Content-Type: application/json' -d '{"name": "nova"}' | jq -r .api_token)
 H="Authorization: Bearer $TOKEN"
 curl -s -H "$H" "$B/channels?unread=true"             # where there is something new
-ROOM=%21abc%3Aexample.org                             # a "room" from that list, url-encoded
+ROOM=%21abc%3Aexample.org                             # a "room" from that list, url-encoded (jq )
 curl -s -H "$H" "$B/channels/$ROOM/events?unread=true" | tee page.json   # read it
 curl -s -X PUT -H "$H" -H 'Content-Type: application/json' "$B/channels/$ROOM/receipt" \
   -d "$(jq '{event_id: .events[-1].event_id}' page.json)"                # mark it read

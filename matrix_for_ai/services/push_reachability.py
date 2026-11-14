@@ -24,6 +24,10 @@ class PushReachability:
             await self._on_recovered()
         self._last = outcome
 
+    @property
+    def failing(self) -> bool:
+        return self._last is not None and self._last.supported and not self._last.reachable
+
     def require_reachable(self) -> None:
         if self._last is None:
             raise ApiError(503, "push_unchecked", "the homeserver has not been asked yet")

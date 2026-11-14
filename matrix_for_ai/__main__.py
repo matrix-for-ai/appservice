@@ -35,6 +35,7 @@ CONFIG_PATH = Path(os.environ.get("MATRIX_FOR_AI_CONFIG", "/etc/matrix-for-ai/co
 
 SPEECH_DESCRIPTION_REFRESH_SECONDS = 300
 PUSH_CHECK_SECONDS = 60
+PUSH_RECHECK_SECONDS = 5
 PREVIOUS_ENCRYPTION_KEY_VARIABLE = "MATRIX_FOR_AI_PREVIOUS_ENCRYPTION_KEY"
 
 
@@ -130,7 +131,8 @@ def compose(
         _speech_descriptions_kept_fresh([synthesizer, transcriber]))
     appservice_application = web.Application(client_max_size=MAX_REQUEST_BYTES)
     appservice_application.cleanup_ctx.append(
-        _checked_every(push_reachability.check, PUSH_CHECK_SECONDS))
+        _checked_every(push_reachability.check, lambda: PUSH_RECHECK_SECONDS
+                       if push_reachability.failing else PUSH_CHECK_SECONDS))
     transport.register_push_routes(appservice_application)
     extension_contexts = load_extensions({
         "configuration": configuration, "http_session": http_session,
@@ -143,14 +145,14 @@ def compose(
     return application, appservice_application, identity_registry, event_router
 
 
-def _checked_every(check, seconds):
+def _checked_every(check, seconds_until_next):
     async def check_forever():
         while True:
             try:
                 await check()
             except Exception:
-                logger.exception("periodic %s failed; retrying in %ss", check.__qualname__, seconds)
-            await asyncio.sleep(seconds)
+                logger.exception("periodic %s failed", check.__qualname__)
+            await asyncio.sleep(seconds_until_next())
 
     async def context(_application):
         task = asyncio.create_task(check_forever())
@@ -168,7 +170,7 @@ def _speech_descriptions_kept_fresh(services):
     async def refresh_speech_descriptions():
         await asyncio.gather(*(service.refresh_description() for service in described))
 
-    return _checked_every(refresh_speech_descriptions, SPEECH_DESCRIPTION_REFRESH_SECONDS)
+    return _checked_every(refresh_speech_descriptions, lambda: SPEECH_DESCRIPTION_REFRESH_SECONDS)
 
 
 async def run(configuration: Configuration) -> None:
