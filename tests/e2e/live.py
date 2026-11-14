@@ -21,7 +21,7 @@ HOMESERVER_URL = os.environ.get("MATRIX_FOR_AI_E2E_HOMESERVER", "").rstrip("/")
 HUMAN_USER = os.environ.get("MATRIX_FOR_AI_E2E_HUMAN", "")
 HUMAN_PASSWORD = os.environ.get("MATRIX_FOR_AI_E2E_HUMAN_PASSWORD", "")
 TIMEOUT_SECONDS = float(os.environ.get("MATRIX_FOR_AI_E2E_TIMEOUT", "30"))
-READY_TIMEOUT_SECONDS = float(os.environ.get("MATRIX_FOR_AI_E2E_READY_TIMEOUT", "120"))
+READY_TIMEOUT_SECONDS = float(os.environ.get("MATRIX_FOR_AI_E2E_READY_TIMEOUT", "30"))
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 ENCRYPTION_STATE = {"type": "m.room.encryption", "state_key": "",
@@ -32,6 +32,7 @@ class Identity:
     def __init__(self, session: aiohttp.ClientSession, mxid: str, token: str) -> None:
         self.session = session
         self.mxid = mxid
+        self.token = token
         self.headers = {"Authorization": f"Bearer {token}"}
 
     async def call(self, method: str, path: str, expect: int = 200, **kwargs):
@@ -180,10 +181,7 @@ async def leave(room: str, *identities: Identity) -> None:
         await identity.call("DELETE", f"/channels/{quote(room, safe='')}", expect=204)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def homeserver_reaches_appservice():
-    if not BASE_URL:
-        return
+def wait_until_homeserver_reaches_appservice() -> None:
     deadline = time.monotonic() + READY_TIMEOUT_SECONDS
     while True:
         try:
@@ -195,7 +193,13 @@ def homeserver_reaches_appservice():
             time.sleep(1)
 
 
-async def _register(session: aiohttp.ClientSession, role: str, run: str) -> Identity:
+@pytest.fixture(scope="session", autouse=True)
+def homeserver_reaches_appservice():
+    if BASE_URL:
+        wait_until_homeserver_reaches_appservice()
+
+
+async def register_identity(session: aiohttp.ClientSession, role: str, run: str) -> Identity:
     async with session.post(
             f"{BASE_URL}/identities", json={"name": f"e2e_{role}_{run}"}) as response:
         assert response.status == 201, await response.text()
@@ -207,13 +211,13 @@ async def _register(session: aiohttp.ClientSession, role: str, run: str) -> Iden
 async def pair():
     async with aiohttp.ClientSession() as session:
         run = secrets.token_hex(3)
-        yield [await _register(session, role, run) for role in ("alice", "bob")]
+        yield [await register_identity(session, role, run) for role in ("alice", "bob")]
 
 
 @pytest_asyncio.fixture(loop_scope="session")
 async def ai():
     async with aiohttp.ClientSession() as session:
-        yield await _register(session, "ai", secrets.token_hex(3))
+        yield await register_identity(session, "ai", secrets.token_hex(3))
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")

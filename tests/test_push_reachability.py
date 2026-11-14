@@ -123,9 +123,20 @@ async def test_membership_is_loaded_again_when_the_homeserver_fails_at_startup(m
     router = appservice.event_router
     appservice.transport.failing["list_joined_rooms"] = 502
     attempt = asyncio.create_task(
-        _catch_up_when_homeserver_ready(router, asyncio.Event()))
+        _catch_up_when_homeserver_ready(appservice.transport, router, asyncio.Event()))
     await asyncio.sleep(0.1)
     assert not attempt.done() and router.managed_in_room(room) == frozenset()
     del appservice.transport.failing["list_joined_rooms"]
     await asyncio.wait_for(attempt, timeout=5)
     assert router.managed_in_room(room) == {mxid}
+
+
+async def test_catching_up_waits_for_the_homeserver_even_without_identities(make_appservice):
+    appservice = await make_appservice(e2ee=False)
+    appservice.transport.failing["list_supported_versions"] = 502
+    attempt = asyncio.create_task(
+        _catch_up_when_homeserver_ready(appservice.transport, appservice.event_router, asyncio.Event()))
+    await asyncio.sleep(0.1)
+    assert not attempt.done()
+    del appservice.transport.failing["list_supported_versions"]
+    await asyncio.wait_for(attempt, timeout=5)

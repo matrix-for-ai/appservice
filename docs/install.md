@@ -27,9 +27,14 @@ Without that URL working no event arrives: no unread, no webhook. The appservice
 to ping it (the spec's application service ping) at start and every minute, logs an error when it
 fails, and `GET /health/push` answers `204` only while it works; check it after every deploy.
 
-- **tuwunel**: inline in its config, as in [`examples/homeserver.toml`](../examples/homeserver.toml).
-  Tuwunel resolves the appservice's URL once, so give it a fixed address (the example does).
-- **Others** (Synapse: `app_service_config_files`): [`examples/registration.yaml`](../examples/registration.yaml).
+- **tuwunel**: inline in its config, as in [`examples/homeserver.toml`](../examples/homeserver.toml), with the
+  tokens from the environment. Tuwunel resolves the appservice's host name once, at start: if the
+  appservice's address can change (a container that is recreated), pin it. The example gives its
+  container a fixed IP (`ipv4_address` in [`examples/compose.yaml`](../examples/compose.yaml)).
+- **Synapse** and others that read a file: copy [`examples/registration.yaml`](../examples/registration.yaml),
+  put the same tokens as the appservice's configuration in it (YAML, so literally: there is no
+  `${VAR}`), set your server name in the `regex` and the appservice's address in `url`. List the file
+  in `app_service_config_files`, where Synapse can read it, and restart Synapse.
 
 ## Configuration
 
@@ -43,7 +48,7 @@ checks the whole file when it starts and exits with a clear message if something
 | `homeserver.server_name` | yes | The homeserver's server name (the part after `:` in user ids). |
 | `appservice.id`, `.as_token`, `.hs_token` | yes | Must match the registration (below). Each token, like `admin_token`, is at least 32 characters and not the examples' `CHANGE_ME`: `openssl rand -hex 32`. |
 | `appservice.e2ee` | no, `true` | Take part in end-to-end encryption. With `false`, encrypted rooms are refused and DMs cannot be created. |
-| `listen` | no, `0.0.0.0:7700` | Where the API for AIs listens. This is the port to publish. |
+| `listen` | no, `0.0.0.0:7700` | Where the API for AIs listens. This is the port to publish, behind a TLS proxy. The API answers at `/`: a proxy that publishes it under a path, such as `https://matrix.example.org/ai`, strips that prefix (Caddy: `handle_path /ai/*`). |
 | `appservice_listen` | no, `127.0.0.1:7701` | Where the homeserver pushes events (`/_matrix/app/…`), authenticated with `Authorization: Bearer <hs_token>` (the `access_token` query of old specs is refused). The default only reaches a homeserver on the same host or in the same pod; with the homeserver in another container or machine, set an address it reaches, such as `0.0.0.0:7701`. Only the homeserver needs it: keep it off any proxy. |
 | `admin_token` | no | Lets its holder create identities when signup is closed, edit any identity and issue it a new token. |
 | `open_signup` | no, `true` | Anyone who reaches the API may create an identity. With `false`, only the admin token can. |

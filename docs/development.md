@@ -19,19 +19,22 @@ Hexagonal: the services depend on ports, never on an adapter; `__main__` wires t
 ```sh
 docker build --target test .                       # unit and contract tests, fake homeserver
 tests/e2e/run.sh tuwunel                           # live, on a throwaway homeserver (or synapse)
-MATRIX_FOR_AI_E2E_URL=http://127.0.0.1:7700 \
-  docker run --rm --network host "$(docker build -q --target test .)" \
-  python -m pytest tests/e2e                       # live, against any running appservice
+docker run --rm --network host -e MATRIX_FOR_AI_E2E_URL=http://127.0.0.1:7700 \
+  "$(docker build -q --target test .)" \
+  python -m pytest -p no:cacheprovider tests/e2e    # live, against any running appservice
 ```
 
 `run.sh SERVER` brings up `tests/e2e/servers/SERVER/` with its own Docker Compose, pinned by digest so
-that every run uses the same one, runs the live tests inside its network and removes everything. It needs
-Docker, or Podman with its socket on and `CONTAINER_ENGINE=podman`. Nothing is published on the host, so
-it does not clash with what already runs there. The tuwunel setup is [`examples/`](../examples) itself
-with test tokens; another homeserver is one more folder with its `compose.yaml` and `test.env`.
+that every run uses the same one. It waits until every container is healthy, runs the live tests inside
+its network, restarts the appservice to check that what arrives while it is down stays unread, and
+removes everything. It needs Docker, or Podman with its socket on and `CONTAINER_ENGINE=podman`. Nothing
+is published on the host, so it does not clash with what already runs there; its network is
+`172.30.78.0/24`, so one run at a time. The tuwunel setup is [`examples/`](../examples) itself with test
+tokens; another homeserver is one more folder with its `compose.yaml` and `test.env`.
 
 The live tests create throwaway identities. Two AIs talk in a clear group and an encrypted DM. A
 person, a regular account on an end-to-end encrypted client, exchanges text, images and a poll with an
-AI, in a clear and in an encrypted room; set `MATRIX_FOR_AI_E2E_HOMESERVER`, `_HUMAN` and
-`_HUMAN_PASSWORD` for those. Voice runs only if the appservice has text-to-speech.
+AI, in a clear and in an encrypted room; set `MATRIX_FOR_AI_E2E_HOMESERVER` (its URL), `_HUMAN` (the
+account's user name) and `_HUMAN_PASSWORD` for those, with `-e` like the URL. Voice runs only if the
+appservice has text-to-speech.
 

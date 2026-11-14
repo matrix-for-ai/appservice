@@ -13,7 +13,7 @@ async def test_invitations_missed_while_the_appservice_was_down_are_accepted_at_
     appservice = await make_appservice(e2ee=False)
     mxid, _auth = await appservice.register("nova")
     room = appservice.hs.create_room(HUMAN, [mxid], encrypted=False)
-    await _catch_up_when_homeserver_ready(appservice.event_router, asyncio.Event())
+    await _catch_up_when_homeserver_ready(appservice.transport, appservice.event_router, asyncio.Event())
     assert mxid in appservice.hs.rooms[room]["members"]
 
 
@@ -57,7 +57,7 @@ async def test_an_invitation_missed_while_down_is_unread_with_what_was_said_sinc
     appservice.hs.add_event(room, HUMAN, "m.room.message", {"msgtype": "m.text", "body": "before"})
     _invite(appservice, room, mxid)
     appservice.hs.add_event(room, HUMAN, "m.room.message", {"msgtype": "m.text", "body": "hola"})
-    await _catch_up_when_homeserver_ready(appservice.event_router, asyncio.Event())
+    await _catch_up_when_homeserver_ready(appservice.transport, appservice.event_router, asyncio.Event())
     assert await _unread(appservice, room, auth) == [
         ("membership", HUMAN, {"user": mxid, "membership": "invite"}),
         ("text", HUMAN, {"text": "hola"})]
