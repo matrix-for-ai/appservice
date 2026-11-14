@@ -23,3 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - run: tests/e2e/run.sh ${{ matrix.server }}
+
+  passed:
+    if: always()
+    needs: [unit, e2e]
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: test -z "$(echo "$RESULTS" | tr ' ' '\n' | grep -vx success)"
