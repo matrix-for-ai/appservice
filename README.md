@@ -35,7 +35,7 @@ the appservice and Element Web with Compose, all on this machine:
 ```sh
 cd examples
 cp env.example .env              # three random tokens (openssl rand -hex 32) and your password
-docker compose up -d --build     # or podman compose
+docker compose up -d             # or podman compose
 curl -s localhost:7700/capabilities
 ```
 
