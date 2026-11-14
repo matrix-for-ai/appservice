@@ -1,0 +1,76 @@
+name: release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, X.Y.Z
+        required: true
+      commit:
+        description: Full SHA of the commit on master to release
+        required: true
+      notes:
+        description: Release notes
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency: release
+
+jobs:
+  release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'release/'))
+    runs-on: ubuntu-24.04
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      RELEASE: ${{ inputs.version || github.event.pull_request.head.ref }}
+      COMMIT: ${{ inputs.commit || github.event.pull_request.merge_commit_sha }}
+      NOTES: ${{ inputs.notes || github.event.pull_request.body }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ env.COMMIT }}
+          fetch-depth: 0
+
+      - name: Check the version and the commit
+        run: |
+          version=${RELEASE#release/}
+          [[ $version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] \
+              || { echo "::error::$version is not X.Y.Z"; exit 1; }
+          ! git rev-parse --quiet --verify "refs/tags/v$version" >/dev/null \
+              || { echo "::error::v$version is already released"; exit 1; }
+          git merge-base --is-ancestor "$COMMIT" origin/master \
+              || { echo "::error::$COMMIT is not on master"; exit 1; }
+          echo "VERSION=$version" >>"$GITHUB_ENV"
+
+      - name: Push the image
+        run: |
+          major=${VERSION%%.*} minor=${VERSION%.*}
+          docker build \
+              --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --label org.opencontainers.image.version="$VERSION" \
+              --label org.opencontainers.image.revision="$(git rev-parse HEAD)" \
+              --tag "$IMAGE:$VERSION" --tag "$IMAGE:$minor" --tag "$IMAGE:$major" --tag "$IMAGE:latest" .
+          docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<<"$GH_TOKEN"
+          for tag in "$VERSION" "$minor" "$major" latest; do
+              docker push --quiet "$IMAGE:$tag"
+          done
+          echo "$IMAGE:$VERSION@$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE:$VERSION")" \
+              >"$RUNNER_TEMP/image"
+
+      - name: Create the release
+        run: |
+          {
+              [[ -z $NOTES ]] || printf '%s\n\n' "$NOTES"
+              echo "Image: \`$(cat "$RUNNER_TEMP/image")\`"
+          } >"$RUNNER_TEMP/notes.md"
+          gh release create "v$VERSION" --target "$(git rev-parse HEAD)" --title "$VERSION" \
+              --notes-file "$RUNNER_TEMP/notes.md"
