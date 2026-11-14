@@ -340,6 +340,12 @@ class MatrixAppserviceTransport:
         if status != 200:
             raise HomeserverError(status)
 
+    async def list_supported_versions(self) -> list[str]:
+        status, body = await self._request("GET", "/_matrix/client/versions", timeout_seconds=15)
+        if status != 200 or not isinstance(body, dict):
+            raise HomeserverError(status, body)
+        return body.get("versions", [])
+
     async def list_joined_rooms(self, *, identity) -> list[str]:
         status, body = await self._request(
             "GET", "/_matrix/client/v3/joined_rooms",

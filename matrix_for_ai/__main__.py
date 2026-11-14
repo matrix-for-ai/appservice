@@ -126,10 +126,11 @@ def compose(
     )
     application = build_application()
     http_api.register_routes(application)
-    application.cleanup_ctx.append(_checked_every(push_reachability.check, PUSH_CHECK_SECONDS))
     application.cleanup_ctx.append(
         _speech_descriptions_kept_fresh([synthesizer, transcriber]))
     appservice_application = web.Application(client_max_size=MAX_REQUEST_BYTES)
+    appservice_application.cleanup_ctx.append(
+        _checked_every(push_reachability.check, PUSH_CHECK_SECONDS))
     transport.register_push_routes(appservice_application)
     extension_contexts = load_extensions({
         "configuration": configuration, "http_session": http_session,
@@ -187,17 +188,21 @@ async def run(configuration: Configuration) -> None:
         configuration, http_session, transport, encryption)
 
     runners = []
-    for name, app, host, port in (
-            ("HTTP API", application, configuration.listen_host, configuration.listen_port),
-            ("appservice", appservice_application, configuration.appservice_listen_host,
-             configuration.appservice_listen_port)):
+
+    async def listen(name, app, host, port):
         runner = web.AppRunner(app, access_log_class=AccessLoggerWithoutQuery)
         await runner.setup()
-        await web.TCPSite(runner, host, port).start()
         runners.append(runner)
+        await web.TCPSite(runner, host, port).start()
         logger.info("%s listening on %s:%d", name, host, port)
+
     try:
-        await _catch_up_when_homeserver_ready(event_router, stop)
+        await listen("HTTP API", application, configuration.listen_host, configuration.listen_port)
+        await _catch_up_when_homeserver_ready(transport, event_router, stop)
+        if stop.is_set():
+            return
+        await listen("appservice", appservice_application,
+                     configuration.appservice_listen_host, configuration.appservice_listen_port)
         if encryption is not None:
             for localpart in identity_registry.managed_localparts():
                 if stop.is_set():
@@ -214,11 +219,12 @@ async def run(configuration: Configuration) -> None:
 
 
 async def _catch_up_when_homeserver_ready(
-    event_router: IncomingEventRouter, stop: asyncio.Event,
+    transport, event_router: IncomingEventRouter, stop: asyncio.Event,
 ) -> None:
     attempt = 0
     while not stop.is_set():
         try:
+            await transport.list_supported_versions()
             await event_router.bootstrap_membership()
             await event_router.accept_pending_invitations()
             return

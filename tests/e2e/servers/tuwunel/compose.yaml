@@ -22,4 +22,7 @@ services:
       - appservice
 
 networks:
-  matrix: {}
+  matrix:
+    ipam:
+      config:
+        - subnet: 172.30.78.0/24

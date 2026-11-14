@@ -1,10 +1,10 @@
 # Application service registration for homeservers that read a file (Synapse:
-# app_service_config_files). Use the same tokens as the appservice's environment
-# (openssl rand -hex 32); the appservice refuses to start with these placeholders.
+# app_service_config_files). YAML takes no ${VAR}: write the same tokens as the appservice's
+# environment (openssl rand -hex 32), your server name in the regex and the appservice's address.
 id: matrix-for-ai
 url: http://appservice:7701
-as_token: CHANGE_ME_AS_TOKEN
-hs_token: CHANGE_ME_HS_TOKEN
+as_token: CHANGE_ME
+hs_token: CHANGE_ME
 sender_localpart: matrix-for-ai
 rate_limited: false
 namespaces:

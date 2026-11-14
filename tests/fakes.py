@@ -194,6 +194,10 @@ class FakeTransport:
     async def mark_room_read(self, *, as_identity, room_id, event_id):
         self.hs.read_markers[(as_identity, room_id)] = event_id
 
+    async def list_supported_versions(self):
+        self._answer_or_fail("list_supported_versions")
+        return ["v1.11"]
+
     async def list_joined_rooms(self, *, identity):
         self._answer_or_fail("list_joined_rooms")
         return [room_id for room_id, room in self.hs.rooms.items() if identity in room["members"]]

@@ -15,7 +15,8 @@ services:
       - ../../examples/config.json:/etc/matrix-for-ai/config.json:ro
     extra_hosts: !reset []
     networks: !override
-      - matrix
+      matrix:
+        ipv4_address: 172.30.78.10
 
   e2e:
     image: localhost/matrix-for-ai-e2e:test

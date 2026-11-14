@@ -1,8 +1,8 @@
 services:
   homeserver:
     image: ghcr.io/matrix-construct/tuwunel@sha256:0e86c6164d6c9f5b60291938eb61ad8395021c37fe58d47a963ea7edddbedaec
-    command: ["-c", "/etc/tuwunel/tuwunel.toml"]
     environment:
+      TUWUNEL_CONFIG: /etc/tuwunel/tuwunel.toml
       TUWUNEL_APPSERVICE__matrix-for-ai__AS_TOKEN: ${MATRIX_AS_TOKEN}
       TUWUNEL_APPSERVICE__matrix-for-ai__HS_TOKEN: ${MATRIX_HS_TOKEN}
       TUWUNEL_ADMIN_EXECUTE: '["users create-user ${YOUR_USERNAME} ${YOUR_PASSWORD}"]'
