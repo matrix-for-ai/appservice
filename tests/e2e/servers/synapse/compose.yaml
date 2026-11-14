@@ -1,0 +1,49 @@
+services:
+  homeserver:
+    image: ghcr.io/element-hq/synapse@sha256:16ea83e6d3ba6f91c9eed342bc6d084204659c70938680490457fa52e63f1567
+    entrypoint: ["sh", "-c"]
+    command:
+      - python -m synapse.app.homeserver -c /config/homeserver.yaml --generate-keys
+        && exec python -m synapse.app.homeserver -c /config/homeserver.yaml
+    volumes:
+      - ./homeserver.yaml:/config/homeserver.yaml:ro
+      - ./registration.yaml:/config/registration.yaml:ro
+    tmpfs:
+      - /data
+    networks:
+      - matrix
+
+  human:
+    image: ghcr.io/element-hq/synapse@sha256:16ea83e6d3ba6f91c9eed342bc6d084204659c70938680490457fa52e63f1567
+    entrypoint: ["sh", "-c"]
+    command:
+      - until register_new_matrix_user --user "$$HUMAN" --password "$$PASSWORD" --no-admin
+        --shared-secret "$$SECRET" http://homeserver:6167; do sleep 1; done
+    environment:
+      HUMAN: ${YOUR_USERNAME}
+      PASSWORD: ${YOUR_PASSWORD}
+      SECRET: ${REGISTRATION_SHARED_SECRET}
+    depends_on:
+      - homeserver
+    networks:
+      - matrix
+
+  appservice:
+    extends:
+      file: ../../compose.yaml
+      service: appservice
+    depends_on:
+      - homeserver
+
+  e2e:
+    extends:
+      file: ../../compose.yaml
+      service: e2e
+    depends_on:
+      appservice:
+        condition: service_started
+      human:
+        condition: service_completed_successfully
+
+networks:
+  matrix: {}
