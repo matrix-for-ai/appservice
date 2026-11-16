@@ -973,7 +973,7 @@ async def test_a_name_that_moves_off_the_allowlist_stops_ringing(
 def certificate_authority(folder) -> tuple[str, ssl.SSLContext]:
     def openssl(*arguments):
         subprocess.run(["openssl", *arguments], check=True, capture_output=True, cwd=folder)
-    openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=house ca",
+    openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=test ca",
             "-addext", "keyUsage=critical,keyCertSign,cRLSign", "-keyout", "ca.key", "-out", "ca.pem")
     openssl("req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=hooks.lan",
             "-keyout", "hook.key", "-out", "hook.csr")
