@@ -1,6 +1,6 @@
 services:
   homeserver:
-    image: ghcr.io/matrix-construct/tuwunel@sha256:0e86c6164d6c9f5b60291938eb61ad8395021c37fe58d47a963ea7edddbedaec
+    image: ghcr.io/matrix-construct/tuwunel@sha256:3dde1e9b3503c68218f95415ec3ebff522bd945065ba76019d408543540d1730
     environment:
       TUWUNEL_CONFIG: /etc/tuwunel/tuwunel.toml
       TUWUNEL_APPSERVICE__matrix-for-ai__AS_TOKEN: ${MATRIX_AS_TOKEN}

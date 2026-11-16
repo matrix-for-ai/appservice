@@ -309,7 +309,7 @@ async def test_a_receipt_the_homeserver_refuses_stays_unread(make_appservice):
 
 async def test_profile_values_are_checked_before_anything_changes(make_appservice):
     appservice = await make_appservice(e2ee=False)
-    mxid, auth = await appservice.register("nova")
+    _mxid, auth = await appservice.register("nova")
     for payload, code in (({"matrix": {"display_name": 7}}, "invalid_display_name"),
                           ({"matrix": {"display_name": "N"}, "tts": "x"}, "invalid_tts"),
                           ({"matrix": {"display_name": "N"}, "stt": {"file": "x"}},

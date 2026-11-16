@@ -20,6 +20,7 @@ _MAX_MINT_ATTEMPTS = 8
 @dataclass(frozen=True)
 class ResolvedIdentity:
     mxid: str
+    localpart: str
     mailbox: Mailbox
 
 
@@ -74,6 +75,12 @@ class IdentityRegistry:
             return None
         return self._store(localpart)
 
+    def managed_store_for(self, mxid: str) -> IdentityStore:
+        store = self.store_for(mxid)
+        if store is None:
+            raise LookupError(f"{mxid} is not a managed identity")
+        return store
+
     def _store(self, localpart: str) -> IdentityStore:
         if localpart not in self._stores:
             self._stores[localpart] = IdentityStore(self._mailbox_base_dir / localpart)
@@ -84,7 +91,7 @@ class IdentityRegistry:
         if localpart is None or localpart not in self._managed_localparts:
             return None
         return ResolvedIdentity(
-            self._mxid_of(localpart), self._store(localpart).mailbox)
+            self._mxid_of(localpart), localpart, self._store(localpart).mailbox)
 
     def issue_token(self, localpart: str) -> str:
         token = secrets.token_urlsafe(32)
@@ -105,7 +112,7 @@ class IdentityRegistry:
         if localpart is None or localpart not in self._managed_localparts:
             return None
         return ResolvedIdentity(
-            self._mxid_of(localpart), self._store(localpart).mailbox)
+            self._mxid_of(localpart), localpart, self._store(localpart).mailbox)
 
     @staticmethod
     def _hash_token(token: str) -> str:

@@ -1,4 +1,3 @@
-import asyncio
 import hmac
 import itertools
 import json
@@ -16,6 +15,7 @@ from yarl import URL
 from ..ports.matrix_transport import (
     ApplicationServiceUserRegistration, EventContext, HomeserverError, IncomingEventHandler,
     MediaTooLarge, PushCheck, TimelineChunk)
+from .transaction_log import TransactionLog
 
 
 logger = logging.getLogger(__name__)
@@ -30,11 +30,13 @@ class MatrixAppserviceTransport:
         homeserver_url: str,
         application_service_token: str,
         homeserver_token: str,
+        transaction_log: TransactionLog,
     ) -> None:
         self._http_session = http_session
         self._homeserver_url = homeserver_url
         self._application_service_token = application_service_token
         self._homeserver_token = homeserver_token
+        self._transaction_log = transaction_log
         self._incoming_event_handler: IncomingEventHandler | None = None
 
     def set_incoming_event_handler(self, handler: IncomingEventHandler) -> None:
@@ -78,10 +80,15 @@ class MatrixAppserviceTransport:
             return web.json_response(
                 {"errcode": "M_BAD_JSON", "error": "the transaction needs a list of events"},
                 status=400)
-        logger.info("transaction %s events=%d", transaction_id, len(events))
-        if self._incoming_event_handler is not None:
-            for event in events:
-                await self._incoming_event_handler(event)
+        events_done = self._transaction_log.events_done(transaction_id)
+        if events and events_done == len(events):
+            logger.info("transaction %s already handled", transaction_id)
+            return web.json_response({})
+        logger.info("transaction %s events=%d", transaction_id, len(events) - events_done)
+        for position in range(events_done, len(events)):
+            if self._incoming_event_handler is not None:
+                await self._incoming_event_handler(events[position])
+            self._transaction_log.record_events_done(transaction_id, position + 1)
         return web.json_response({})
 
     async def _handle_ping(self, request: web.Request) -> web.Response:
@@ -332,7 +339,7 @@ class MatrixAppserviceTransport:
 
     async def mark_room_read(self, *, as_identity, room_id, event_id) -> None:
         encoded_room_id = quote(room_id, safe="")
-        status, body = await self._request(
+        status, _body = await self._request(
             "POST", f"/_matrix/client/v3/rooms/{encoded_room_id}/read_markers",
             impersonated_user_id=as_identity,
             json_body={"m.fully_read": event_id, "m.read": event_id}, timeout_seconds=15,
@@ -483,7 +490,7 @@ class MatrixAppserviceTransport:
 def _homeserver_answer():
     try:
         yield
-    except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+    except (TimeoutError, aiohttp.ClientError) as error:
         raise HomeserverError(None) from error
 
 

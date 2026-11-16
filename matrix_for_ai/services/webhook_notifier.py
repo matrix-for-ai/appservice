@@ -54,10 +54,10 @@ class WebhookNotifier:
         await self._allowed_addresses(url)
         replaced = self.describe(mxid) is not None
         secret = secrets.token_urlsafe(32)
-        self._identity_registry.store_for(mxid).set_webhook(Webhook(url, secret))
+        self._identity_registry.managed_store_for(mxid).set_webhook(Webhook(url, secret))
         return secret, replaced
 
-    async def _allowed_addresses(self, url: str) -> tuple["WebhookTarget", list]:
+    async def _allowed_addresses(self, url: str) -> tuple[WebhookTarget, list]:
         target = _webhook_target(url)
         if not self.enabled:
             raise ApiError(501, "webhooks_disabled", "this installation allows no webhook targets")
@@ -76,12 +76,14 @@ class WebhookNotifier:
         return any(
             target.allows(address, port)
             and (named_network is None
-                 or (target.network is not None and target.network.subnet_of(named_network)))
+                 or (target.network is not None
+                     and target.network.network_address in named_network
+                     and target.network.broadcast_address in named_network))
             and (port not in self._own_ports or target.port == port)
             for target in self._allowed_targets)
 
     def unregister(self, mxid: str) -> bool:
-        return self._identity_registry.store_for(mxid).delete_webhook()
+        return self._identity_registry.managed_store_for(mxid).delete_webhook()
 
     def describe(self, mxid: str):
         webhook = self._webhook(mxid)
@@ -105,7 +107,7 @@ class WebhookNotifier:
         mxid, room_id = key
         store = self._identity_registry.store_for(mxid)
         webhook = None if store is None else store.webhook()
-        if webhook is None:
+        if store is None or webhook is None:
             return
         try:
             target, addresses = await self._allowed_addresses(webhook.url)
@@ -125,19 +127,19 @@ class WebhookNotifier:
     async def _post_to_first_reachable(self, mxid, url, target, addresses, body, signature) -> None:
         headers = {"Host": target.netloc, "Content-Type": "application/json",
                    _SIGNATURE_HEADER: f"sha256={signature}"}
-        tls = {}
-        if target.scheme == "https":
-            tls = {"ssl": self._tls_context,
-                   "server_hostname": None if target.address else target.host}
+        https = target.scheme == "https"
+        ssl = self._tls_context if https else True
+        server_hostname = target.host if https and not target.address else None
         for address in addresses:
             try:
                 async with self._http_session.post(
                         URL(url).with_host(str(address)), data=body, headers=headers,
-                        timeout=self._timeout, allow_redirects=False, **tls) as response:
+                        timeout=self._timeout, allow_redirects=False, ssl=ssl,
+                        server_hostname=server_hostname) as response:
                     if response.status >= 300:
                         logger.info("webhook for %s answered %d", mxid, response.status)
                     return
-            except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+            except (TimeoutError, aiohttp.ClientError) as error:
                 logger.info("webhook for %s unreachable at %s: %s",
                             mxid, address, error.__class__.__name__)
 

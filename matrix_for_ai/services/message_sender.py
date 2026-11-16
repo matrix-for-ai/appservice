@@ -3,7 +3,7 @@ import logging
 from ..api_errors import ApiError
 from ..payload_fields import (
     optional_positive_integer, optional_string, reject_unknown_fields, required_string)
-from ..ports.encryption import EncryptionEngine
+from ..ports.encryption import EncryptionEngine, EncryptionFor
 from ..ports.matrix_transport import MatrixTransport
 from ..ports.speech import SpeechUnavailable, Synthesizer, VoiceMessage
 from .channel_membership import ChannelMembership
@@ -21,7 +21,7 @@ VOICE_MESSAGE_FILENAME = "Voice message.ogg"
 class MessageSender:
     def __init__(
         self, *, transport: MatrixTransport, membership: ChannelMembership,
-        profiles: ProfileService, encryption_for, speech_limit: RateLimit,
+        profiles: ProfileService, encryption_for: EncryptionFor, speech_limit: RateLimit,
         synthesizer: Synthesizer | None = None,
     ) -> None:
         self._transport = transport

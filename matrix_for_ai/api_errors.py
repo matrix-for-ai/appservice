@@ -20,7 +20,7 @@ class ApiError(Exception):
 def homeserver_problem(status: int | None, body=None) -> dict:
     if status is None:
         return problem(502, "homeserver_error", "the homeserver did not answer")
-    upstream = {"status": status}
+    upstream: dict[str, int | str] = {"status": status}
     errcode = body.get("errcode") if isinstance(body, dict) else None
     if isinstance(errcode, str):
         upstream["errcode"] = errcode

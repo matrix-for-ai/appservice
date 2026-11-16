@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+from typing import Any
 
 import aiohttp
 from Crypto.PublicKey import ECC
@@ -12,6 +13,9 @@ from nio import AsyncClient, AsyncClientConfig, RoomPreset, ToDeviceMessage
 from nio.crypto import decrypt_attachment
 from nio.events import MegolmEvent
 from nio.exceptions import EncryptionError
+
+from ...ports.encryption import EncryptedFile, OlmEventHandler
+from .stored_secrets import StoredSecrets
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +27,11 @@ def _canonical_json(obj):
 
 def _unpadded_base64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii").rstrip("=")
+
+
+async def _require_ok(response, action):
+    if response.status != 200:
+        raise RuntimeError(f"{action} failed {response.status}: {await response.text()}")
 
 
 def _preset(*, is_direct: bool, public: bool) -> RoomPreset:
@@ -43,8 +52,8 @@ class Ed25519SigningKey:
 
 
 class CryptoEngine:
-    def __init__(self, *, homeserver_url, server_name, as_token, localpart, store_root,
-                 stored_secrets):
+    def __init__(self, *, homeserver_url: str, server_name: str, as_token: str, localpart: str,
+                 store_root: str, stored_secrets: StoredSecrets) -> None:
         self._stored_secrets = stored_secrets
         self._homeserver_url = homeserver_url
         self._server_name = server_name
@@ -54,12 +63,12 @@ class CryptoEngine:
         self._store_dir = os.path.join(store_root, localpart)
         self._session_file = os.path.join(self._store_dir, "session.json")
         self._cross_signing_file = os.path.join(self._store_dir, "cross_signing.json")
-        self._client = None
+        self._client: AsyncClient
         self._sync_lock = asyncio.Lock()
-        self._access_token = None
-        self.device_id = None
+        self._access_token: str | None = None
+        self.device_id: str | None = None
 
-    async def start(self):
+    async def start(self) -> None:
         os.makedirs(self._store_dir, exist_ok=True)
         restored = self._load_persisted_session()
         access_token, device_id = restored if restored else await self._login_and_persist()
@@ -80,16 +89,16 @@ class CryptoEngine:
         except Exception as error:
             logger.warning("cross-signing bootstrap failed for %s: %s", self.mxid, error)
 
-    async def receive_keys(self):
+    async def receive_keys(self) -> None:
         await self._sync(timeout=0)
 
-    async def decrypt_event(self, raw_event, room_id):
+    async def decrypt_event(self, raw_event: dict, room_id: str) -> dict | None:
         decrypted = self._try_decrypt(raw_event, room_id)
         if decrypted is None:
             return None
         return getattr(decrypted, "source", None) or {}
 
-    def decrypt_attachment(self, ciphertext, encrypted_file):
+    def decrypt_attachment(self, ciphertext: bytes, encrypted_file: EncryptedFile) -> bytes | None:
         try:
             return decrypt_attachment(
                 ciphertext, encrypted_file.key, encrypted_file.sha256, encrypted_file.iv)
@@ -132,7 +141,7 @@ class CryptoEngine:
         if not devices <= session.users_shared_with | session.users_ignored:
             del client.olm.outbound_group_sessions[room_id]
 
-    async def upload_encrypted(self, *, data, mime_type, filename):
+    async def upload_encrypted(self, *, data: bytes, mime_type: str, filename: str) -> dict | None:
         upload, file_keys = await self._client.upload(
             lambda *_: io.BytesIO(data),
             content_type=mime_type, filename=filename,
@@ -143,7 +152,7 @@ class CryptoEngine:
             return None
         return {**file_keys, "url": content_uri}
 
-    async def send_event(self, *, room_id, event_type, content):
+    async def send_event(self, *, room_id: str, event_type: str, content: dict) -> str | None:
         await self._prepare_send(room_id)
         response = await self._client.room_send(
             room_id, event_type, content, ignore_unverified_devices=True)
@@ -152,7 +161,10 @@ class CryptoEngine:
             logger.warning("encrypted send failed for %s in %s: %s", self.mxid, room_id, response)
         return event_id
 
-    async def create_encrypted_room(self, *, invitees, name, topic, is_direct, public):
+    async def create_encrypted_room(
+        self, *, invitees: list[str], name: str | None, topic: str | None, is_direct: bool,
+        public: bool,
+    ) -> str | None:
         create = await self._client.room_create(
             name=name, topic=topic, invite=invitees, is_direct=is_direct,
             preset=_preset(is_direct=is_direct, public=public),
@@ -164,14 +176,16 @@ class CryptoEngine:
             ])
         return getattr(create, "room_id", None)
 
-    async def sync_once(self, timeout=8000):
+    async def sync_once(self, timeout: int = 8000) -> None:
         await self._sync(timeout=timeout)
 
-    async def put_state(self, room_id, event_type, content, state_key=""):
+    async def put_state(
+        self, room_id: str, event_type: str, content: dict, state_key: str = ""
+    ) -> Any:
         return await self._client.room_put_state(
             room_id, event_type, content, state_key=state_key)
 
-    async def sync_loop(self, stop_event, timeout=5000):
+    async def sync_loop(self, stop_event: asyncio.Event, timeout: int = 5000) -> None:
         while not stop_event.is_set():
             try:
                 await self._sync(timeout=timeout)
@@ -179,7 +193,7 @@ class CryptoEngine:
                 logger.warning("sync loop error for %s: %s", self.mxid, error)
                 await asyncio.sleep(1)
 
-    def install_olm_event_capture(self, event_type, handler):
+    def install_olm_event_capture(self, event_type: str, handler: OlmEventHandler) -> None:
         machine = self._client.olm
         handlers = getattr(machine, "_captured_olm_handlers", None)
         if handlers is None:
@@ -198,7 +212,9 @@ class CryptoEngine:
             machine._handle_olm_event = capturing
         handlers[event_type] = handler
 
-    async def send_olm_to_device(self, user_id, device_id, event_type, content):
+    async def send_olm_to_device(
+        self, user_id: str, device_id: str, event_type: str, content: dict
+    ) -> Any:
         olm = self._client.olm
         device = self._client.device_store[user_id].get(device_id)
         if device is None:
@@ -219,9 +235,8 @@ class CryptoEngine:
             recipient_device=device_id, content=olm_content)
         return await self._client.to_device(message)
 
-    async def close(self):
-        if self._client is not None:
-            await self._client.close()
+    async def close(self) -> None:
+        await self._client.close()
 
     def _try_decrypt(self, raw_event, room_id):
         event = MegolmEvent.from_dict(self._with_legacy_sender_fields(raw_event, room_id))
@@ -320,11 +335,13 @@ class CryptoEngine:
             "user_id": self.mxid, "usage": ["user_signing"],
             "keys": {f"ed25519:{signing_keys['usk'].public_key}": signing_keys["usk"].public_key},
         }, master, master_pub)
-        await session.post(
+        async with session.post(
             f"{self._homeserver_url}/_matrix/client/v3/keys/device_signing/upload",
             headers={"Authorization": f"Bearer {self._access_token}"},
             json={"master_key": master_key, "self_signing_key": self_signing_key,
-                  "user_signing_key": user_signing_key})
+                  "user_signing_key": user_signing_key},
+        ) as response:
+            await _require_ok(response, "cross-signing upload")
         logger.info("cross-signing keys uploaded for %s", self.mxid)
 
     def _sign_key_object(self, key_object, signer, signer_pub):
@@ -349,7 +366,12 @@ class CryptoEngine:
         signature = ssk.sign(_canonical_json(
             {k: v for k, v in device_object.items() if k not in ("signatures", "unsigned")}))
         device_object.setdefault("signatures", {}).setdefault(self.mxid, {})[signing_id] = signature
-        await session.post(
+        async with session.post(
             f"{self._homeserver_url}/_matrix/client/v3/keys/signatures/upload",
-            headers=headers, json={self.mxid: {self.device_id: device_object}})
+            headers=headers, json={self.mxid: {self.device_id: device_object}},
+        ) as response:
+            await _require_ok(response, "device self-signing")
+            failures = (await response.json()).get("failures")
+        if failures:
+            raise RuntimeError(f"device self-signing failed: {failures}")
         logger.info("device %s self-signed for %s", self.device_id, self.mxid)

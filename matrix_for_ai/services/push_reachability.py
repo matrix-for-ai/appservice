@@ -1,5 +1,5 @@
 import logging
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from ..api_errors import ApiError
 from ..ports.matrix_transport import MatrixTransport, PushCheck

@@ -26,9 +26,12 @@ FROM runtime AS test
 USER root
 COPY requirements-test.lock requirements.lock /tmp/
 RUN pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements-test.lock
+COPY pyproject.toml /app/
 COPY tests /app/tests
 USER 10001:10001
-RUN python -m pytest -q -p no:cacheprovider tests
+RUN ruff check --no-cache matrix_for_ai tests \
+    && mypy --cache-dir=/dev/null \
+    && python -m pytest -q -p no:cacheprovider tests
 
 
 FROM runtime

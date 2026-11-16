@@ -11,11 +11,13 @@ from aiohttp import web
 
 from .adapters.matrix_appservice_transport import MatrixAppserviceTransport
 from .adapters.openai_speech import OpenAiSpeechSynthesizer, OpenAiTranscriber
+from .adapters.transaction_log import TransactionLog
 from .api.access_log import AccessLoggerWithoutQuery
 from .api.http_api import MAX_REQUEST_BYTES, HttpApi, build_application
 from .configuration import Configuration, ConfigurationError, load_configuration
 from .extensions import load_extensions
-from .ports.matrix_transport import HomeserverError
+from .ports.encryption import EncryptionEngine, EncryptionRegistry
+from .ports.matrix_transport import HomeserverError, MatrixTransport
 from .services.channel_membership import ChannelMembership
 from .services.channels import ChannelService
 from .services.event_reader import EventReader
@@ -39,7 +41,7 @@ PUSH_RECHECK_SECONDS = 5
 PREVIOUS_ENCRYPTION_KEY_VARIABLE = "MATRIX_FOR_AI_PREVIOUS_ENCRYPTION_KEY"
 
 
-def build_encryption(configuration: Configuration):
+def build_encryption(configuration: Configuration) -> EncryptionRegistry | None:
     if not configuration.e2ee:
         return None
     from .adapters.nio.crypto_registry import CryptoEngineRegistry
@@ -58,7 +60,8 @@ def build_encryption(configuration: Configuration):
 
 
 def compose(
-    configuration: Configuration, http_session, transport, encryption, speech=None,
+    configuration: Configuration, http_session: aiohttp.ClientSession, transport: MatrixTransport,
+    encryption: EncryptionRegistry | None, speech: dict | None = None,
 ):
     identity_registry = IdentityRegistry(
         mailbox_base_dir=Path(configuration.mailbox_dir),
@@ -66,7 +69,7 @@ def compose(
     )
     identity_registry.load()
 
-    async def encryption_for(mxid: str):
+    async def encryption_for(mxid: str) -> EncryptionEngine | None:
         if encryption is None:
             return None
         engine = encryption.get(mxid)
@@ -179,11 +182,13 @@ async def run(configuration: Configuration) -> None:
     for signal_number in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(signal_number, stop.set)
     http_session = aiohttp.ClientSession()
+    transaction_log = TransactionLog(Path(configuration.mailbox_dir))
     transport = MatrixAppserviceTransport(
         http_session=http_session,
         homeserver_url=configuration.homeserver_url,
         application_service_token=configuration.as_token,
         homeserver_token=configuration.hs_token,
+        transaction_log=transaction_log,
     )
     encryption = build_encryption(configuration)
     application, appservice_application, identity_registry, event_router = compose(
@@ -218,6 +223,7 @@ async def run(configuration: Configuration) -> None:
         for runner in runners:
             await runner.cleanup()
         await http_session.close()
+        transaction_log.close()
 
 
 async def _catch_up_when_homeserver_ready(
@@ -238,7 +244,7 @@ async def _catch_up_when_homeserver_ready(
                 attempt, error, delay_seconds)
             try:
                 await asyncio.wait_for(stop.wait(), timeout=delay_seconds)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
 

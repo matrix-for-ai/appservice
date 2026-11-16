@@ -4,7 +4,7 @@ from urllib.parse import quote
 import aiohttp
 import pytest
 
-from live import BASE_URL, PNG, Identity, homeserver_reaches_appservice, leave, pair
+from live import BASE_URL, PNG, Identity, leave
 
 pytestmark = pytest.mark.skipif(
     not BASE_URL, reason="set MATRIX_FOR_AI_E2E_URL to run against a running appservice")

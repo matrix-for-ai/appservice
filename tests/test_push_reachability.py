@@ -6,7 +6,7 @@ import pytest
 from aiohttp import web
 
 import fakes
-from fakes import AS_TOKEN, HS_TOKEN
+from fakes import AS_TOKEN, HS_TOKEN, new_transaction_log
 from matrix_for_ai.__main__ import _catch_up_when_homeserver_ready, _checked_every
 from matrix_for_ai.adapters.matrix_appservice_transport import MatrixAppserviceTransport
 from matrix_for_ai.ports.matrix_transport import PushCheck
@@ -51,7 +51,8 @@ async def test_the_appservice_answers_the_homeserver_ping_only_with_its_token(ai
     async with aiohttp.ClientSession() as session:
         transport = MatrixAppserviceTransport(
             http_session=session, homeserver_url="http://homeserver:8008",
-            application_service_token=AS_TOKEN, homeserver_token=HS_TOKEN)
+            application_service_token=AS_TOKEN, homeserver_token=HS_TOKEN,
+            transaction_log=new_transaction_log())
         application = web.Application()
         transport.register_push_routes(application)
         client = await aiohttp_client(application)
@@ -85,7 +86,8 @@ async def test_the_ping_asks_the_homeserver_as_the_appservice(aiohttp_server, an
     async with aiohttp.ClientSession() as session:
         transport = MatrixAppserviceTransport(
             http_session=session, homeserver_url=str(server.make_url("")).rstrip("/"),
-            application_service_token=AS_TOKEN, homeserver_token=HS_TOKEN)
+            application_service_token=AS_TOKEN, homeserver_token=HS_TOKEN,
+            transaction_log=new_transaction_log())
         assert await transport.ping_from_homeserver(appservice_id="matrix-for-ai") == expected
     appservice_id, authorization, body = received[0]
     assert appservice_id == "matrix-for-ai" and authorization == f"Bearer {AS_TOKEN}"

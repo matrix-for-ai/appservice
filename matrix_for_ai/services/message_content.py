@@ -196,12 +196,14 @@ def _media(content):
 def _encrypted_file(node):
     if not isinstance(node, dict):
         return None
-    key = node.get("key").get("k") if isinstance(node.get("key"), dict) else None
-    sha256 = node.get("hashes").get("sha256") if isinstance(node.get("hashes"), dict) else None
-    fields = (node.get("url"), key, sha256, node.get("iv"))
-    if not all(isinstance(field, str) for field in fields):
+    key, hashes = node.get("key"), node.get("hashes")
+    url, iv = node.get("url"), node.get("iv")
+    k = key.get("k") if isinstance(key, dict) else None
+    sha256 = hashes.get("sha256") if isinstance(hashes, dict) else None
+    if not (isinstance(url, str) and isinstance(k, str) and isinstance(sha256, str)
+            and isinstance(iv, str)):
         return None
-    return EncryptedFile(*fields)
+    return EncryptedFile(url, k, sha256, iv)
 
 
 def _details(info):

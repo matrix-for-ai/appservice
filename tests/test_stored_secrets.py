@@ -5,7 +5,7 @@ import pytest
 import vodozemac
 from nio.crypto.sessions import derive_pickle_key
 
-from conftest import base_configuration
+from fakes import base_configuration
 from matrix_for_ai.adapters.nio.stored_secrets import (
     NIO_DEFAULT_PICKLE_KEY, StoredSecrets, StoredSecretsError, rotate_encryption_key)
 from matrix_for_ai.configuration import ConfigurationError, parse_configuration
@@ -39,7 +39,7 @@ def _store_with_pickles(path, pickle_key):
     alice, bob = vodozemac.Account(), vodozemac.Account()
     bob.generate_one_time_keys(1)
     session = alice.create_outbound_session(
-        list(bob.one_time_keys.values())[0], bob.curve25519_key)
+        next(iter(bob.one_time_keys.values())), bob.curve25519_key)
     inbound = vodozemac.InboundGroupSession(vodozemac.GroupSession().session_key)
     key = derive_pickle_key(pickle_key)
     database = sqlite3.connect(path)

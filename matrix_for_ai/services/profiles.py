@@ -1,5 +1,6 @@
 import dataclasses
 import json
+from typing import Any
 
 from ..api_errors import ApiError
 from ..payload_fields import reject_unknown_fields
@@ -53,7 +54,7 @@ class ProfileService:
 
     async def describe(self, mxid: str) -> dict:
         matrix = await self._transport.fetch_profile(identity=mxid)
-        profile = self._identity_registry.store_for(mxid).profile()
+        profile = self._identity_registry.managed_store_for(mxid).profile()
         return {
             "mxid": mxid,
             "localpart": self._identity_registry.localpart_of(mxid),
@@ -65,7 +66,7 @@ class ProfileService:
         }
 
     def speech_options(self, mxid: str, section: str, overrides=None) -> dict:
-        options = getattr(self._identity_registry.store_for(mxid).profile(), section)
+        options = getattr(self._identity_registry.managed_store_for(mxid).profile(), section)
         if overrides is not None:
             options = merge_patch(options, validated_options(section, overrides))
         return options
@@ -77,7 +78,7 @@ class ProfileService:
         if read_only:
             raise ApiError(422, "read_only_field", f"{', '.join(read_only)} cannot be changed")
         display_name = _display_name_patch(patch)
-        store = self._identity_registry.store_for(mxid)
+        store = self._identity_registry.managed_store_for(mxid)
         current = store.profile()
         profile = _patched_profile(current, patch)
         if display_name is not _UNCHANGED:
@@ -129,7 +130,7 @@ _UNCHANGED = object()
 
 
 def _patched_profile(current: Profile, patch: dict) -> Profile:
-    changes = {}
+    changes: dict[str, Any] = {}
     for section in SPEECH_SECTIONS:
         if section not in patch:
             continue

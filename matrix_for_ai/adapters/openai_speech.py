@@ -48,7 +48,7 @@ class _OpenAiCompatibleService:
                     self._keep_last_good_description(f"provider answered {response.status}")
                     return
                 info = await response.json(content_type=None)
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
+        except (TimeoutError, aiohttp.ClientError, ValueError) as error:
             self._keep_last_good_description(error.__class__.__name__)
             return
         self._description = {"available": True, "info": info}
@@ -72,7 +72,7 @@ class OpenAiSpeechSynthesizer(_OpenAiCompatibleService):
                     raise SpeechUnavailable(f"provider answered {response.status}: {detail}",
                                             provider_status=response.status)
                 audio = await response.read()
-        except (aiohttp.ClientError, asyncio.TimeoutError) as error:
+        except (TimeoutError, aiohttp.ClientError) as error:
             raise SpeechUnavailable(f"provider unreachable: {error.__class__.__name__}")
         return await encode_voice_message(audio)
 
@@ -95,7 +95,7 @@ class OpenAiTranscriber(_OpenAiCompatibleService):
                     raise SpeechUnavailable(f"provider answered {response.status}: {detail}",
                                             provider_status=response.status)
                 body = await response.json(content_type=None)
-        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as error:
+        except (TimeoutError, aiohttp.ClientError, ValueError) as error:
             raise SpeechUnavailable(f"provider unreachable: {error.__class__.__name__}")
         if not isinstance(body, dict) or not isinstance(body.get("text"), str):
             raise SpeechUnavailable("provider answered without text")
@@ -145,7 +145,7 @@ async def _run_ffmpeg(audio: bytes, output_arguments: list[str]) -> bytes:
         stderr=asyncio.subprocess.PIPE)
     try:
         output, errors = await asyncio.wait_for(process.communicate(audio), timeout=60)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         process.kill()
         raise SpeechUnavailable("audio conversion timed out")
     if process.returncode != 0 or not output:

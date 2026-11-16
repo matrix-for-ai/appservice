@@ -1,0 +1,14 @@
+[tool.ruff]
+target-version = "py314"
+
+[tool.ruff.lint]
+ignore = ["BLE001", "I001"]
+
+[tool.mypy]
+packages = ["matrix_for_ai"]
+python_version = "3.14"
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["nio", "nio.*"]
+ignore_missing_imports = true
