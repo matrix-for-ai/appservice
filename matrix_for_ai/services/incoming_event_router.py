@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import logging
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from ..ports.matrix_transport import MatrixTransport
 from .event_reader import MESSAGE_EVENT_TYPES, TIMELINE_EVENT_TYPES, is_rendered_membership

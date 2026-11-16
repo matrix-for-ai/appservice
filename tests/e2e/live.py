@@ -2,24 +2,21 @@ import asyncio
 import base64
 import io
 import os
-import secrets
 import time
 import urllib.error
 import urllib.request
 from urllib.parse import quote
 
 import aiohttp
-import pytest
-import pytest_asyncio
-from nio import (AsyncClient, AsyncClientConfig, EncryptionError, LoginResponse, MegolmEvent,
-                 RoomCreateResponse, RoomEncryptedMedia, RoomMessage, RoomPreset,
-                 RoomSendResponse, UnknownEvent, UploadResponse)
+from nio import (AsyncClient, EncryptionError, MegolmEvent, RoomCreateResponse, RoomEncryptedMedia,
+                 RoomMessage, RoomPreset, RoomSendResponse, UnknownEvent, UploadResponse)
 from nio.crypto import decrypt_attachment
 
 BASE_URL = os.environ.get("MATRIX_FOR_AI_E2E_URL", "").rstrip("/")
 HOMESERVER_URL = os.environ.get("MATRIX_FOR_AI_E2E_HOMESERVER", "").rstrip("/")
 HUMAN_USER = os.environ.get("MATRIX_FOR_AI_E2E_HUMAN", "")
 HUMAN_PASSWORD = os.environ.get("MATRIX_FOR_AI_E2E_HUMAN_PASSWORD", "")
+EXTENSION = os.environ.get("MATRIX_FOR_AI_E2E_EXTENSION") == "true"
 TIMEOUT_SECONDS = float(os.environ.get("MATRIX_FOR_AI_E2E_TIMEOUT", "30"))
 READY_TIMEOUT_SECONDS = float(os.environ.get("MATRIX_FOR_AI_E2E_READY_TIMEOUT", "30"))
 PNG = base64.b64decode(
@@ -193,12 +190,6 @@ def wait_until_homeserver_reaches_appservice() -> None:
             time.sleep(1)
 
 
-@pytest.fixture(scope="session", autouse=True)
-def homeserver_reaches_appservice():
-    if BASE_URL:
-        wait_until_homeserver_reaches_appservice()
-
-
 async def register_identity(session: aiohttp.ClientSession, role: str, run: str) -> Identity:
     async with session.post(
             f"{BASE_URL}/identities", json={"name": f"e2e_{role}_{run}"}) as response:
@@ -207,31 +198,3 @@ async def register_identity(session: aiohttp.ClientSession, role: str, run: str)
     return Identity(session, body["mxid"], body["api_token"])
 
 
-@pytest.fixture
-async def pair():
-    async with aiohttp.ClientSession() as session:
-        run = secrets.token_hex(3)
-        yield [await register_identity(session, role, run) for role in ("alice", "bob")]
-
-
-@pytest_asyncio.fixture(loop_scope="session")
-async def ai():
-    async with aiohttp.ClientSession() as session:
-        yield await register_identity(session, "ai", secrets.token_hex(3))
-
-
-@pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def human(tmp_path_factory):
-    client = AsyncClient(
-        HOMESERVER_URL, HUMAN_USER, store_path=str(tmp_path_factory.mktemp("human")),
-        config=AsyncClientConfig(encryption_enabled=True))
-    login = await client.login(HUMAN_PASSWORD, device_name="e2e")
-    assert isinstance(login, LoginResponse), login
-    try:
-        async with aiohttp.ClientSession() as session:
-            human = Human(client, session)
-            await human.sync(full_state=True)
-            yield human
-    finally:
-        await client.logout()
-        await client.close()

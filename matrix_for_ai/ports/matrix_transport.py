@@ -1,6 +1,7 @@
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from aiohttp import web
 
@@ -33,7 +34,7 @@ class MediaUri:
     media_id: str
 
     @classmethod
-    def parse(cls, text) -> "MediaUri | None":
+    def parse(cls, text) -> MediaUri | None:
         if not isinstance(text, str) or not text.startswith("mxc://"):
             return None
         server_name, separator, media_id = text[len("mxc://"):].partition("/")

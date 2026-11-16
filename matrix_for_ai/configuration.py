@@ -42,7 +42,7 @@ class Configuration:
     webhook_ca_file: str
     tts: SpeechServiceConfiguration | None
     stt: SpeechServiceConfiguration | None
-    limits: "Limits"
+    limits: Limits
     extensions: dict = field(default_factory=dict)
     open_signup: bool = True
 
@@ -138,7 +138,7 @@ class _Reader:
             return default
         return self._raw[key]
 
-    def section(self, key: str, *, required: bool = True) -> "_Reader":
+    def section(self, key: str, *, required: bool = True) -> _Reader:
         child = _Reader(self.value(key, default={}, required=required), self._name(key))
         self._children.append(child)
         return child
@@ -168,7 +168,7 @@ class _Reader:
             raise ConfigurationError(f"{self._name(key)} must look like HOST:PORT, e.g. {default}")
         return match["host"] or "0.0.0.0", int(match["port"])
 
-    def limit(self, key: str, *, default: int) -> int | None:
+    def limit(self, key: str, *, default: int | None) -> int | None:
         self._known.add(key)
         if key not in self._raw:
             return default

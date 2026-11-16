@@ -13,7 +13,7 @@ import aiohttp
 import pytest
 from aiohttp import web
 
-from conftest import base_configuration
+from fakes import base_configuration, new_transaction_log
 from matrix_for_ai.configuration import ConfigurationError, load_configuration, parse_configuration
 from matrix_for_ai.adapters.nio.stored_secrets import StoredSecrets
 from matrix_for_ai.adapters.openai_speech import OpenAiSpeechSynthesizer, OpenAiTranscriber, waveform_of
@@ -352,7 +352,8 @@ async def test_the_homeserver_token_is_accepted_only_in_the_authorization_header
     async with aiohttp.ClientSession() as session:
         transport = MatrixAppserviceTransport(
             http_session=session, homeserver_url="http://homeserver:8008",
-            application_service_token="as-" + "a" * 40, homeserver_token="hs-" + "h" * 40)
+            application_service_token="as-" + "a" * 40, homeserver_token="hs-" + "h" * 40,
+            transaction_log=new_transaction_log())
         application = web.Application()
         transport.register_push_routes(application)
         client = await aiohttp_client(application)
@@ -409,7 +410,8 @@ async def test_namespace_queries_answer_that_the_appservice_creates_nothing_on_d
     async with aiohttp.ClientSession() as session:
         transport = MatrixAppserviceTransport(
             http_session=session, homeserver_url="http://homeserver:8008",
-            application_service_token="as-" + "a" * 40, homeserver_token="hs-" + "h" * 40)
+            application_service_token="as-" + "a" * 40, homeserver_token="hs-" + "h" * 40,
+            transaction_log=new_transaction_log())
         application = web.Application()
         transport.register_push_routes(application)
         client = await aiohttp_client(application)
@@ -432,7 +434,8 @@ async def test_endpoints_the_appservice_does_not_implement_answer_m_unrecognized
     async with aiohttp.ClientSession() as session:
         transport = MatrixAppserviceTransport(
             http_session=session, homeserver_url="http://homeserver:8008",
-            application_service_token="as-" + "a" * 40, homeserver_token="hs-" + "h" * 40)
+            application_service_token="as-" + "a" * 40, homeserver_token="hs-" + "h" * 40,
+            transaction_log=new_transaction_log())
         application = web.Application()
         transport.register_push_routes(application)
         client = await aiohttp_client(application)

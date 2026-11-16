@@ -10,6 +10,7 @@ from aiohttp import web
 
 from ..api_errors import PROBLEM_CONTENT_TYPE, ApiError, homeserver_problem, problem
 from ..payload_fields import optional_string, reject_unknown_fields, required_string
+from ..ports.encryption import EncryptionFor
 from ..ports.matrix_transport import HomeserverError, MatrixTransport
 from ..services.channels import ChannelService, Page
 from ..services.event_reader import MediaFile
@@ -83,7 +84,7 @@ class HttpApi:
         profiles: ProfileService,
         webhook_notifier: WebhookNotifier,
         speech_services: dict,
-        encryption_for,
+        encryption_for: EncryptionFor,
         e2ee_enabled: bool,
         request_limit: RateLimit,
         signup_limit: RateLimit,
@@ -194,16 +195,14 @@ class HttpApi:
         _query(request)
         if request.body_exists:
             raise ApiError(400, "body_not_allowed", "this request takes no body")
-        localpart = self._identity_registry.localpart_of(identity.mxid)
         logger.info("token issued for %s", identity.mxid)
         return web.json_response(
-            {"mxid": identity.mxid, "api_token": self._identity_registry.issue_token(localpart)})
+            {"mxid": identity.mxid, "api_token": self._identity_registry.issue_token(identity.localpart)})
 
     async def _revoke_token(self, request: web.Request) -> web.Response:
         identity = self._target_identity(request)
         _query(request)
-        localpart = self._identity_registry.localpart_of(identity.mxid)
-        if not self._identity_registry.revoke_token(localpart):
+        if not self._identity_registry.revoke_token(identity.localpart):
             raise ApiError(404, "token_not_found", f"{identity.mxid} has no token")
         logger.info("token revoked for %s", identity.mxid)
         return web.Response(status=204)

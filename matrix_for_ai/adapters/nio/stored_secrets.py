@@ -74,6 +74,7 @@ def rotate_encryption_key(crypto_dir: str, previous_key: str, new_key: str) -> l
                 continue
             except StoredSecretsError:
                 data = previous.read_json(path)
+            assert data is not None
             new.write_json(path, data)
         rotated.append(identity_dir.name)
     return rotated

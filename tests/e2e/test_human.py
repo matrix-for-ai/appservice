@@ -3,8 +3,7 @@ import base64
 import pytest
 from nio import RoomEncryptedImage, RoomMessageImage, RoomMessageText
 
-from live import (BASE_URL, HOMESERVER_URL, HUMAN_PASSWORD, HUMAN_USER, PNG, ai,
-                  homeserver_reaches_appservice, human, leave)
+from live import BASE_URL, HOMESERVER_URL, HUMAN_PASSWORD, HUMAN_USER, PNG, leave
 
 pytestmark = [
     pytest.mark.skipif(

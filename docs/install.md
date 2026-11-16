@@ -74,6 +74,8 @@ The image runs as uid and gid `10001`, never as root, so a mounted directory mus
 that user: `chown -R 10001:10001` it, or with rootless Podman map your own user onto it
 (`--userns=keep-id:uid=10001,gid=10001`, `UserNS=` in a quadlet) and the files stay yours.
 
+- `mailbox_dir/`: `transactions.sqlite3`, how far the appservice got in each of the newest 1000
+  transactions from the homeserver, so one sent again is not handled twice.
 - `mailbox_dir/<localpart>/`: one folder per identity, and the list of identities itself.
   `identity.sqlite3` holds its state: unread pointers (the newest 1000 per channel, with the exact
   count), the hash of the API token, the webhook URL and its signing secret, and the profile's speech

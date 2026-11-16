@@ -2,8 +2,12 @@ import asyncio
 import base64
 import itertools
 import json
+import tempfile
+from pathlib import Path
 
 from aiohttp import web
+
+from matrix_for_ai.adapters.transaction_log import TransactionLog
 
 from matrix_for_ai.ports.matrix_transport import (
     ApplicationServiceUserRegistration, EventContext, HomeserverError, MediaTooLarge, PushCheck,
@@ -18,6 +22,10 @@ ADMIN_TOKEN = "admin-token-0123456789abcdef01234567"
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 PNG_BASE64 = base64.b64encode(PNG).decode()
+
+
+def new_transaction_log() -> TransactionLog:
+    return TransactionLog(Path(tempfile.mkdtemp()))
 
 
 class FakeHomeserver:
@@ -324,3 +332,15 @@ class FakeTranscriber:
 
     async def refresh_description(self):
         pass
+
+
+def base_configuration(tmp_path, **overrides) -> dict:
+    raw = {
+        "homeserver": {"url": "http://homeserver:8008", "server_name": SERVER},
+        "appservice": {"id": "test", "as_token": AS_TOKEN, "hs_token": HS_TOKEN, "e2ee": True},
+        "admin_token": ADMIN_TOKEN,
+        "storage": {"mailbox_dir": str(tmp_path / "mailboxes"),
+                    "crypto_dir": str(tmp_path / "crypto")},
+    }
+    raw.update(overrides)
+    return raw

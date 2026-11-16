@@ -4,15 +4,15 @@ import aiohttp
 import pytest
 from aiohttp import web
 
-from fakes import AS_TOKEN, PNG
+from fakes import AS_TOKEN, PNG, new_transaction_log
 from matrix_for_ai.adapters.matrix_appservice_transport import MatrixAppserviceTransport
 from matrix_for_ai.ports.matrix_transport import MediaTooLarge, MediaUri
 
 HUMAN = "@human:example.org"
 VICTIM = "@ai_victim:example.org"
 HOSTILE_URIS = [
-    "mxc://x/y/../../../../../client/v3/rooms/!room:example.org/messages?dir=b"
-    f"&user_id={VICTIM}",
+    ("mxc://x/y/../../../../../client/v3/rooms/!room:example.org/messages?dir=b"
+     f"&user_id={VICTIM}"),
     "mxc://example.org/../../client/v3/sync",
     "mxc://example.org/%2E%2E/%2E%2E/client/v3/joined_rooms",
     "mxc://example.org/abc/def",
@@ -74,8 +74,8 @@ async def test_download_uses_authenticated_media_as_the_requesting_identity(aioh
             max_bytes=None)
     assert data == b"bytes"
     assert requests == [(
-        "/_matrix/client/v1/media/download/matrix.example.org:8448/abc"
-        "?user_id=@ai_nova:example.org",
+        ("/_matrix/client/v1/media/download/matrix.example.org:8448/abc"
+         "?user_id=@ai_nova:example.org"),
         "/_matrix/client/v1/media/download/matrix.example.org:8448/abc",
         ["@ai_nova:example.org"], f"Bearer {AS_TOKEN}")]
 
@@ -142,7 +142,8 @@ async def _forbidden(request):
 def _transport(session, server):
     return MatrixAppserviceTransport(
         http_session=session, homeserver_url=str(server.make_url("")).rstrip("/"),
-        application_service_token=AS_TOKEN, homeserver_token="unused")
+        application_service_token=AS_TOKEN, homeserver_token="unused",
+            transaction_log=new_transaction_log())
 
 
 async def test_attachment_over_the_limit_is_refused_and_left_out(make_appservice):

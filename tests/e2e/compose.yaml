@@ -7,7 +7,8 @@ services:
     build: ../..
     ports: !reset []
     volumes: !override
-      - ../../examples/config.json:/etc/matrix-for-ai/config.json:ro
+      - ./config.json:/etc/matrix-for-ai/config.json:ro
+      - ./encryption_extension.py:/app/encryption_extension.py:ro
     extra_hosts: !reset []
     networks: !override
       matrix:
@@ -24,5 +25,6 @@ services:
       MATRIX_FOR_AI_E2E_HOMESERVER: http://homeserver:6167
       MATRIX_FOR_AI_E2E_HUMAN: ${YOUR_USERNAME}
       MATRIX_FOR_AI_E2E_HUMAN_PASSWORD: ${YOUR_PASSWORD}
+      MATRIX_FOR_AI_E2E_EXTENSION: "true"
     networks:
       - matrix

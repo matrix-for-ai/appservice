@@ -1,34 +1,16 @@
 import ipaddress
 import socket
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 import aiohttp
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from contract import RECORDER, declared  # noqa: E402
-from fakes import (  # noqa: E402
-    ADMIN_TOKEN, AS_TOKEN, HS_TOKEN, SERVER, FakeEncryptionRegistry, FakeHomeserver,
-    FakeTransport)
-from matrix_for_ai.__main__ import compose  # noqa: E402
-from matrix_for_ai.services import webhook_notifier  # noqa: E402
-from matrix_for_ai.configuration import parse_configuration  # noqa: E402
-
-
-def base_configuration(tmp_path, **overrides) -> dict:
-    raw = {
-        "homeserver": {"url": "http://homeserver:8008", "server_name": SERVER},
-        "appservice": {"id": "test", "as_token": AS_TOKEN, "hs_token": HS_TOKEN, "e2ee": True},
-        "admin_token": ADMIN_TOKEN,
-        "storage": {"mailbox_dir": str(tmp_path / "mailboxes"),
-                    "crypto_dir": str(tmp_path / "crypto")},
-    }
-    raw.update(overrides)
-    return raw
+from contract import RECORDER, declared
+from fakes import (
+    HS_TOKEN, FakeEncryptionRegistry, FakeHomeserver, FakeTransport, base_configuration)
+from matrix_for_ai.__main__ import compose
+from matrix_for_ai.services import webhook_notifier
+from matrix_for_ai.configuration import parse_configuration
 
 
 @dataclass

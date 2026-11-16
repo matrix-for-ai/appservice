@@ -1,6 +1,7 @@
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -60,3 +61,6 @@ class EncryptionRegistry(Protocol):
     async def ensure(self, localpart: str) -> EncryptionEngine | None: ...
 
     async def close_all(self) -> None: ...
+
+
+EncryptionFor = Callable[[str], Awaitable[EncryptionEngine | None]]

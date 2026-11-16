@@ -1,3 +1,5 @@
 -c requirements.lock
 pytest>=9.2.0,<10                   # removals only in major releases
 pytest-aiohttp>=1.1.1,<1.2          # no declared policy: patch updates only
+ruff>=0.17.5,<0.18                  # 0.x: a minor release may change the rules, so patch updates only
+mypy>=2.4.1,<2.5                    # a minor release may add errors, so patch updates only

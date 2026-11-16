@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from ..api_errors import ApiError
 from ..payload_fields import optional_flag, optional_string, reject_unknown_fields, required_string
+from ..ports.encryption import EncryptionFor
 from ..ports.matrix_transport import HomeserverError, MatrixTransport, MediaTooLarge
 from .channel_membership import PRESENT, ChannelMembership
 from .event_reader import (
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 USER_ID_PATTERN = re.compile(r"@[^:\s]+:\S+")
 CHANNEL_FIELDS = ("name", "topic", "invite", "direct", "public", "encrypted")
+EventRecords = list[dict]
 
 
 @dataclass(frozen=True)
@@ -29,7 +31,7 @@ class Page:
 class ChannelService:
     def __init__(
         self, *, transport: MatrixTransport, membership: ChannelMembership,
-        event_reader: EventReader, event_router: IncomingEventRouter, encryption_for,
+        event_reader: EventReader, event_router: IncomingEventRouter, encryption_for: EncryptionFor,
         e2ee_enabled: bool,
     ) -> None:
         self._transport = transport
@@ -84,10 +86,11 @@ class ChannelService:
                     await self._event_reader.enrich(record, identity.mxid, engine, include)
         return {"events": records, "has_more": has_more}
 
-    async def _unread(self, identity, room_id, limit, engine) -> tuple[list, bool]:
+    async def _unread(self, identity, room_id, limit, engine) -> tuple[EventRecords, bool]:
         pending = identity.mailbox.unread_event_ids(room_id)
         already_undecryptable = identity.mailbox.undecryptable_event_ids(room_id)
-        records, undecryptable, not_messages, gone = [], [], [], []
+        records: EventRecords = []
+        undecryptable, not_messages, gone = [], [], []
         while pending and len(records) < limit:
             event_id = pending.pop(0)
             record = await self._event_reader.build_record(
@@ -120,7 +123,8 @@ class ChannelService:
                 raise ApiError(404, "event_not_found", f"{anchor} is not an event of {room_id}")
             token = context.token_after if after else context.token_before
         backwards = after is None
-        records, has_more = [], True
+        records: EventRecords = []
+        has_more = True
         while has_more and len(records) < limit:
             chunk = await self._transport.fetch_timeline(
                 room_id=room_id, as_identity=identity.mxid, backwards=backwards,

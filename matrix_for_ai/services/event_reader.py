@@ -156,7 +156,7 @@ class EventReader:
                 return {**base, "type": "poll_end",
                         "content": {"poll_event_id": poll_event_id} if poll_event_id else {}}
             case Location(geo_uri=geo_uri, coordinates=coordinates):
-                content = {"geo_uri": geo_uri}
+                content: dict[str, object] = {"geo_uri": geo_uri}
                 if coordinates is not None:
                     content["lat"], content["lon"] = coordinates
                 return {**base, "type": "location", "content": content}
@@ -178,7 +178,7 @@ class EventReader:
         details = {"mimetype": media.mimetype, "filename": media.filename, **media.details}
         record = {**base, "type": media.kind, "content": details}
         if media.kind == "audio" \
-                and self._identity_registry.store_for(mxid).profile().transcribe_audio:
+                and self._identity_registry.managed_store_for(mxid).profile().transcribe_audio:
             transcript = await self._transcribe(media, mxid, engine)
             if transcript is not None:
                 details["transcript"] = transcript
@@ -187,7 +187,7 @@ class EventReader:
     async def _transcribe(self, media: Media, mxid, engine):
         if self._transcriber is None:
             return None
-        options = self._identity_registry.store_for(mxid).profile().stt
+        options = self._identity_registry.managed_store_for(mxid).profile().stt
         key = (media.url, json.dumps(options, sort_keys=True))
         if key in self._transcripts:
             self._transcripts.move_to_end(key)
