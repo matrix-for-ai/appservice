@@ -1,6 +1,6 @@
 services:
   homeserver:
-    image: ghcr.io/element-hq/synapse@sha256:16ea83e6d3ba6f91c9eed342bc6d084204659c70938680490457fa52e63f1567
+    image: ghcr.io/element-hq/synapse@sha256:c6b5dba477c41b22167e771174456364b7c9c83a4cb2d5d7ee1e530334c5cd06
     entrypoint: ["sh", "-c"]
     command:
       - python -m synapse.app.homeserver -c /config/homeserver.yaml --generate-keys
@@ -16,7 +16,7 @@ services:
       - matrix
 
   human:
-    image: ghcr.io/element-hq/synapse@sha256:16ea83e6d3ba6f91c9eed342bc6d084204659c70938680490457fa52e63f1567
+    image: ghcr.io/element-hq/synapse@sha256:c6b5dba477c41b22167e771174456364b7c9c83a4cb2d5d7ee1e530334c5cd06
     healthcheck:
       disable: true
     entrypoint: ["sh", "-c"]
