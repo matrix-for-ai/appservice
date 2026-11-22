@@ -47,3 +47,6 @@ appservice has text-to-speech. The encryption API for extensions is tested with
 Ruff and mypy are configured in `pyproject.toml`. The lockfiles come from pip-compile, run in the
 `PYTHON_IMAGE` of the `Dockerfile`, with the command written at the top of each.
 
+
+CI runs the unit tests natively on `linux/amd64` and `linux/arm64`, and the live ones on `linux/amd64`. A
+release builds the image on each and publishes both under the same tags.
