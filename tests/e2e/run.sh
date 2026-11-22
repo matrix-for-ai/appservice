@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-compose_image=docker.io/library/docker@sha256:48678dab48932d2b9189040748f321d4eb09c90193bbf4f4b9b86d72cffd6e25
+compose_image=docker.io/library/docker@sha256:5a7af0dcb0e46c803efe9b45371dd21cb500e5b4453250394ac6f06d49b6e6f1
 
 server="${1:?usage: run.sh SERVER, one of: $(ls "$(dirname "$0")/servers")}"
 repository="$(cd "$(dirname "$0")/../.." && pwd)"
