@@ -175,6 +175,9 @@ class IncomingEventRouter:
         if await self._left_for_denied_members(room_id, mxid):
             return True
         self._managed_mxids_by_room.setdefault(room_id, set()).add(mxid)
+        mailbox = self._identity_registry.mailbox_for(mxid)
+        if mailbox is not None:
+            mailbox.add_channel(room_id)
         for event in await self._unread_since_invitation(room_id, mxid):
             self._note_for(mxid, room_id, event)
         return True

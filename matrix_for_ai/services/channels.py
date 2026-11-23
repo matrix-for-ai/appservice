@@ -229,6 +229,7 @@ class ChannelService:
             raise ApiError(403, "forbidden", f"{room_id} is not public and you are not invited")
         _require_success(status, "join")
         await self._leave_if_denied_members(identity, room_id)
+        identity.mailbox.add_channel(room_id)
         return {**_channel_view(room_id, identity.mailbox.channel(room_id)),
                 "encrypted": await self._is_encrypted(identity, room_id)}
 

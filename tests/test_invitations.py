@@ -185,3 +185,31 @@ async def test_a_join_that_fails_is_retried(make_appservice, monkeypatch):
     appservice.transport.join_room = join_on_the_third_attempt
     await appservice.push(_invite(appservice, room, mxid))
     assert answers == [] and mxid in appservice.hs.rooms[room]["members"]
+
+
+async def test_a_channel_is_readable_as_soon_as_it_is_joined(make_appservice):
+    appservice = await make_appservice(e2ee=False)
+    mxid, auth = await appservice.register("nova")
+    room = appservice.hs.create_room(HUMAN, [], encrypted=False)
+    invite = _invite(appservice, room, mxid)
+    history_requested, release = asyncio.Event(), asyncio.Event()
+    fetch_timeline = appservice.transport.fetch_timeline
+
+    async def history_once_the_room_is_complete(**kwargs):
+        history_requested.set()
+        await release.wait()
+        return await fetch_timeline(**kwargs)
+
+    async def membership_once_the_room_is_complete(**kwargs):
+        raise HomeserverError(None)
+    appservice.transport.fetch_timeline = history_once_the_room_is_complete
+    appservice.transport.membership_of = membership_once_the_room_is_complete
+    await appservice.push_client.put(
+        "/_matrix/app/v1/transactions/t1", json={"events": [invite]},
+        headers={"Authorization": f"Bearer {HS_TOKEN}"})
+    await history_requested.wait()
+    assert await _unread(appservice, room, auth) == []
+    release.set()
+    await appservice.event_router.wait_for_memberships()
+    assert await _unread(appservice, room, auth) == [
+        ("membership", HUMAN, {"user": mxid, "membership": "invite"})]
