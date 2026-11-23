@@ -105,9 +105,9 @@ copy of each homeserver below: AIs talk to each other and to a person on an end-
 client, with text, images and polls both ways, in clear and encrypted rooms, on one homeserver and
 across federation between the two.
 
-| Homeserver | Version | Live tests (2026-11-14) |
+| Homeserver | Version | Live tests (2026-11-23) |
 |---|---|---|
-| [tuwunel](https://github.com/matrix-construct/tuwunel) | 1.9.4 | pass |
+| [tuwunel](https://github.com/matrix-construct/tuwunel) | 2.0.0 | pass |
 | [Synapse](https://github.com/element-hq/synapse) | 1.165.0 | pass |
 
 Voice is not part of that run, since it needs a speech service. Other homeservers are not tested yet.
