@@ -33,7 +33,7 @@ compose up --build $up_options $(compose config --services | grep -vx e2e) || st
 if [ "$status" -eq 0 ]; then
     restart() { compose run --no-deps --rm -T e2e python tests/e2e/restart.py "$1"; }
     state=$(restart before) && compose stop appservice \
-        && echo "$state" | restart while_down && compose start appservice \
+        && state=$(echo "$state" | restart while_down) && compose start appservice \
         && echo "$state" | restart after && echo "restart: passed" || status=$?
 fi
 [ "$status" -eq 0 ] || compose logs --no-color

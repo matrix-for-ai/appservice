@@ -1,0 +1,115 @@
+services:
+  certificates:
+    image: ghcr.io/element-hq/synapse@sha256:c6b5dba477c41b22167e771174456364b7c9c83a4cb2d5d7ee1e530334c5cd06
+    healthcheck:
+      disable: true
+    entrypoint: ["/certificates.sh"]
+    volumes:
+      - ./certificates.sh:/certificates.sh:ro
+      - certificates:/certificates
+
+  homeserver:
+    extends:
+      file: ../../../../examples/compose.yaml
+      service: homeserver
+    environment:
+      TUWUNEL_ALLOW_FEDERATION: "true"
+      TUWUNEL_PORT: "[6167, 8448]"
+      TUWUNEL_TLS__CERTS: /certificates/example.org.pem
+      TUWUNEL_TLS__KEY: /certificates/example.org.key
+      TUWUNEL_TLS__DUAL_PROTOCOL: "true"
+      TUWUNEL_IP_RANGE_DENYLIST: "[]"
+      TUWUNEL_TRUSTED_SERVERS: "[]"
+      SSL_CERT_FILE: /certificates/ca.pem
+    ports: !reset []
+    volumes: !override
+      - ../../../../examples/homeserver.toml:/etc/tuwunel/tuwunel.toml:ro
+      - certificates:/certificates:ro
+    depends_on:
+      certificates:
+        condition: service_completed_successfully
+    networks:
+      matrix:
+        aliases: [example.org]
+
+  appservice:
+    extends:
+      file: ../../compose.yaml
+      service: appservice
+    depends_on:
+      - homeserver
+
+  remote-homeserver:
+    image: ghcr.io/element-hq/synapse@sha256:c6b5dba477c41b22167e771174456364b7c9c83a4cb2d5d7ee1e530334c5cd06
+    entrypoint: ["sh", "-c"]
+    command:
+      - python -m synapse.app.homeserver -c /config/homeserver.yaml --generate-keys
+        && exec python -m synapse.app.homeserver -c /config/homeserver.yaml
+    healthcheck:
+      test: ["CMD", "curl", "-fSs", "http://localhost:6167/health"]
+    volumes:
+      - ./homeserver.yaml:/config/homeserver.yaml:ro
+      - ./registration.yaml:/config/registration.yaml:ro
+      - certificates:/certificates:ro
+    tmpfs:
+      - /data
+    depends_on:
+      certificates:
+        condition: service_completed_successfully
+    networks:
+      matrix:
+        aliases: [example.net]
+
+  remote-appservice:
+    extends:
+      file: ../../compose.yaml
+      service: appservice
+    volumes: !override
+      - ./remote-config.json:/etc/matrix-for-ai/config.json:ro
+      - ../../encryption_extension.py:/app/encryption_extension.py:ro
+    networks: !override
+      matrix:
+        ipv4_address: 172.30.78.11
+    depends_on:
+      - remote-homeserver
+
+  human:
+    image: ghcr.io/element-hq/synapse@sha256:c6b5dba477c41b22167e771174456364b7c9c83a4cb2d5d7ee1e530334c5cd06
+    healthcheck:
+      disable: true
+    entrypoint: ["sh", "-c"]
+    command:
+      - until register_new_matrix_user --user "$$HUMAN" --password "$$PASSWORD" --no-admin
+        --shared-secret "$$SECRET" http://remote-homeserver:6167; do sleep 1; done
+    environment:
+      HUMAN: ${YOUR_USERNAME}
+      PASSWORD: ${YOUR_PASSWORD}
+      SECRET: ${REGISTRATION_SHARED_SECRET}
+    depends_on:
+      - remote-homeserver
+    networks:
+      - matrix
+
+  e2e:
+    extends:
+      file: ../../compose.yaml
+      service: e2e
+    environment:
+      MATRIX_FOR_AI_E2E_REMOTE_URL: http://remote-appservice:7700
+      MATRIX_FOR_AI_E2E_HOMESERVER: http://remote-homeserver:6167
+    depends_on:
+      appservice:
+        condition: service_started
+      remote-appservice:
+        condition: service_started
+      human:
+        condition: service_completed_successfully
+
+networks:
+  matrix:
+    ipam:
+      config:
+        - subnet: 172.30.78.0/24
+
+volumes:
+  certificates:

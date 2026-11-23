@@ -87,7 +87,8 @@ class MatrixTransport(Protocol):
 
     async def create_room(
         self, *, as_identity: str, name: str | None, topic: str | None,
-        invitees: list[str], is_direct: bool, public: bool,
+        invitees: list[str], is_direct: bool, public: bool, federate: bool,
+        server_acl: dict | None,
     ) -> str: ...
 
     async def join_room(
@@ -144,7 +145,7 @@ class MatrixTransport(Protocol):
 
     async def list_joined_rooms(self, *, identity: str) -> list[str]: ...
 
-    async def list_invited_rooms(self, *, identity: str) -> list[str]: ...
+    async def list_invited_rooms(self, *, identity: str) -> dict[str, str | None]: ...
 
     async def is_room_encrypted(self, *, room_id: str, as_identity: str) -> bool: ...
 

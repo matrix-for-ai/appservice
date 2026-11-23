@@ -198,6 +198,10 @@ class Mailbox:
                 database.execute(
                     "UPDATE channels SET dropped_unread = 0 WHERE room = ?", (room_id,))
 
+    def add_channel(self, room_id: str) -> None:
+        with self._database as database:
+            _advance_channel(database, room_id, None)
+
     def remove_channel(self, room_id: str) -> None:
         with self._database as database:
             database.execute("DELETE FROM channels WHERE room = ?", (room_id,))

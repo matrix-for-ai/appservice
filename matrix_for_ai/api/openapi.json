@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "matrix-for-ai",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "license": {
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"
@@ -2266,6 +2266,28 @@
               }
             }
           },
+          "403": {
+            "description": "- `server_not_allowed`: an invitee is on a server this identity may not talk to.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "server_not_allowed"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
           "415": {
             "description": "- `unsupported_media_type`: `Content-Type` is not `application/json`.",
             "content": {
@@ -2289,7 +2311,7 @@
             }
           },
           "422": {
-            "description": "- `unknown_field`: a field this call does not take.\n- `invalid_name`: `name` is not a string.\n- `invalid_topic`: `topic` is not a string.\n- `invalid_invite`: `invite` is not a list of user ids.\n- `invalid_direct`: `direct` is not a boolean.\n- `invalid_public`: `public` is not a boolean, or a direct channel is public.\n- `invalid_encrypted`: `encrypted` is not a boolean.\n- `name_required`: an unencrypted group channel without `name`.",
+            "description": "- `unknown_field`: a field this call does not take.\n- `invalid_name`: `name` is not a string.\n- `invalid_topic`: `topic` is not a string.\n- `invalid_invite`: `invite` is not a list of user ids.\n- `invalid_direct`: `direct` is not a boolean.\n- `invalid_public`: `public` is not a boolean, or a direct channel is public.\n- `invalid_encrypted`: `encrypted` is not a boolean.\n- `invalid_federate`: `federate` is not a boolean, or it is false and an invitee is on another server.\n- `name_required`: an unencrypted group channel without `name`.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2304,6 +2326,7 @@
                         "invalid_direct",
                         "invalid_public",
                         "invalid_encrypted",
+                        "invalid_federate",
                         "name_required"
                       ]
                     }
@@ -2598,7 +2621,7 @@
             }
           },
           "403": {
-            "description": "- `forbidden`: the channel is not public and you are not invited.",
+            "description": "- `forbidden`: the channel is not public and you are not invited.\n- `server_not_allowed`: the channel has members on servers this identity may not talk to; you left it at once.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2606,7 +2629,8 @@
                   "properties": {
                     "code": {
                       "enum": [
-                        "forbidden"
+                        "forbidden",
+                        "server_not_allowed"
                       ]
                     }
                   }
@@ -3107,6 +3131,28 @@
                     "code": {
                       "enum": [
                         "unauthorized"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-API-Version": {
+                "$ref": "#/components/headers/X-API-Version"
+              }
+            }
+          },
+          "403": {
+            "description": "- `server_not_allowed`: the channel is not encrypted and has members on servers this identity may not talk to.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem",
+                  "properties": {
+                    "code": {
+                      "enum": [
+                        "server_not_allowed"
                       ]
                     }
                   }
@@ -4022,7 +4068,7 @@
             }
           },
           "403": {
-            "description": "- `forbidden`: the homeserver does not let you invite.",
+            "description": "- `forbidden`: the homeserver does not let you invite.\n- `server_not_allowed`: the user is on a server this identity may not talk to.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4030,7 +4076,8 @@
                   "properties": {
                     "code": {
                       "enum": [
-                        "forbidden"
+                        "forbidden",
+                        "server_not_allowed"
                       ]
                     }
                   }
@@ -4940,6 +4987,11 @@
           "encrypted": {
             "type": "boolean",
             "description": "Defaults to the installation's e2ee."
+          },
+          "federate": {
+            "type": "boolean",
+            "default": true,
+            "description": "With false, only users of this homeserver can ever join it, as Matrix's `m.federate`. It cannot change later. Channels of an identity that federates with no other server never federate."
           }
         },
         "additionalProperties": false
@@ -4953,6 +5005,7 @@
           "direct",
           "public",
           "encrypted",
+          "federate",
           "invited"
         ],
         "properties": {
@@ -4984,6 +5037,9 @@
             }
           },
           "public": {
+            "type": "boolean"
+          },
+          "federate": {
             "type": "boolean"
           }
         }

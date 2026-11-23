@@ -64,6 +64,9 @@ checks the whole file when it starts and exits with a clear message if something
 | `speech.tts`, `speech.stt` | no | Each `{url, api_key?, info_url?}`. `url` is the full endpoint; `info_url` is passed through by `GET /capabilities` so AIs can see voices or languages. |
 | `webhooks.allowed_targets` | no, `[]` | Addresses an identity's webhook may reach: `"IP:PORT"`, a network (`"10.0.0.0/8:9000"`), any port (`"10.0.0.5:*"`) or `"*"`. Empty means webhooks are disabled. A webhook URL may use a host name; every address it resolves to must match. `"*"` lets any identity make the appservice post to anything it can reach, except what only a pattern that names it allows: loopback (`127.0.0.0/8`, `::1`), link-local (`169.254.0.0/16`, cloud metadata included, and `fe80::/10`) and the appservice's own ports. A wide network (`0.0.0.0/0`) or a `*` port does not name them. Every address is checked as resolved, the POST goes to that address and redirects are not followed. |
 | `webhooks.ca_file` | no | PEM file with the CA certificates that sign https webhook receivers, trusted besides the system's. For receivers with certificates from a private CA. Verification is strict (RFC 5280): the CA certificate needs the key usage extension, and the receiver's certificate an authority key identifier. |
+| `federation.servers` | no, `{"allow": ["*"], "deny": []}` | Servers the identities may talk to, see [*Federation*](#federation). |
+| `federation.denied_members` | no, `ignore` | What an identity does in a channel where someone of a server it may not talk to is or joins: `ignore`, `leave` or `allow`. |
+| `federation.identities` | no, `{}` | `{"@ai_…:server": {servers?, denied_members?}}`: the rule of one identity, instead of the one above. |
 | `extensions` | no, `{}` | `{"python.module": {options}}`, see [*Extensions*](#extensions). |
 
 ## State to keep
@@ -83,6 +86,43 @@ that user: `chown -R 10001:10001` it, or with rootless Podman map your own user 
 - `crypto_dir/<localpart>/`: the identity's encryption device: Olm/Megolm store, access token and
   cross-signing seeds. **Secret.** Losing it means a new device that cannot read past encrypted
   messages.
+
+## Federation
+
+Whether the homeserver federates is its own setting. On a homeserver that federates, `federation`
+decides, for each identity, which servers it may talk to; the people on the homeserver are not
+affected.
+
+```json
+"federation": {
+  "servers": {"allow": [], "deny": []},
+  "denied_members": "ignore",
+  "identities": {
+    "@ai_support_x1y2z3:example.org": {"servers": {"allow": ["*"]}}
+  }
+}
+```
+
+Here no identity talks to other servers except `@ai_support_x1y2z3`, which talks to all. An entry
+in `identities` replaces the rule for that identity, more open or more closed: `servers` whole, and
+`denied_members` when it sets it. Changes take effect on restart.
+
+- `servers` matches server names as Matrix's `m.room.server_acl` does: `*` and `?` are wildcards,
+  case does not matter and the port is ignored. A server must match `allow` and no `deny`; with
+  `"allow": []` the identity talks to no other server. Its own server is always allowed. Unless the
+  rule allows every server and denies none, servers named by an IP address are refused.
+- An identity cannot create a channel with, invite or join a channel that has someone of a server
+  it may not talk to (`403 server_not_allowed`), and declines that server's invitations.
+- The channels it creates carry the rule as an `m.room.server_acl`, so the servers themselves
+  enforce it. When it may talk to no other server, they are created with `m.federate: false`, and
+  can never federate. An identity can ask for that on any channel with `"federate": false`.
+- A person on the homeserver can still bring someone of another server into a channel an identity
+  is in. `denied_members` says what the identity does then:
+  - `ignore`: it stays, does not see what they send, and does not share its encryption keys with
+    their devices. In a channel that is not encrypted, they would read it, so it refuses to write
+    there. What was written before they arrived stays as readable as the channel's history allows.
+  - `leave`: it leaves the channel, also at startup if it is in one already.
+  - `allow`: it does nothing, as the person who brought them decided.
 
 ## Speech
 

@@ -10,6 +10,7 @@ from ..ports.matrix_transport import HomeserverError, MatrixTransport, MediaTooL
 from .channel_membership import PRESENT, ChannelMembership
 from .event_reader import (
     SKIP_EVENT, TIMELINE_EVENT_TYPES, EventReader, KeysReceivedOnce, MediaFile)
+from .federation_policy import FederationPolicy
 from .identity_registry import ResolvedIdentity
 from .incoming_event_router import IncomingEventRouter
 from .identity_store import ChannelState
@@ -18,7 +19,7 @@ from .identity_store import ChannelState
 logger = logging.getLogger(__name__)
 
 USER_ID_PATTERN = re.compile(r"@[^:\s]+:\S+")
-CHANNEL_FIELDS = ("name", "topic", "invite", "direct", "public", "encrypted")
+CHANNEL_FIELDS = ("name", "topic", "invite", "direct", "public", "encrypted", "federate")
 EventRecords = list[dict]
 
 
@@ -32,8 +33,9 @@ class ChannelService:
     def __init__(
         self, *, transport: MatrixTransport, membership: ChannelMembership,
         event_reader: EventReader, event_router: IncomingEventRouter, encryption_for: EncryptionFor,
-        e2ee_enabled: bool,
+        e2ee_enabled: bool, federation_policy: FederationPolicy,
     ) -> None:
+        self._federation_policy = federation_policy
         self._transport = transport
         self._membership = membership
         self._event_reader = event_reader
@@ -184,13 +186,21 @@ class ChannelService:
         is_direct = optional_flag(payload, "direct", default=len(invitees) == 1)
         public = optional_flag(payload, "public", default=False)
         encrypted = optional_flag(payload, "encrypted", default=self._e2ee_enabled)
+        federate = optional_flag(payload, "federate", default=True)
         if public and is_direct:
             raise ApiError(422, "invalid_public", "a direct channel cannot be public")
         if not encrypted and not is_direct and not name:
             raise ApiError(422, "name_required", "an unencrypted group channel needs a name")
+        remote = [user for user in invitees if not self._federation_policy.is_local(user)]
+        if remote and not federate:
+            raise ApiError(422, "invalid_federate",
+                           f"a channel that does not federate cannot invite {remote[0]}")
+        self._require_allowed(identity, invitees)
+        federate, server_acl = self._federation_policy.room_federation(
+            identity.mxid, federate=federate)
         if encrypted:
             room_id = await self._create_encrypted(
-                identity, invitees, name, topic, is_direct, public)
+                identity, invitees, name, topic, is_direct, public, federate, server_acl)
         elif is_direct and not self._e2ee_enabled:
             raise ApiError(
                 501, "no_e2ee_for_dm",
@@ -199,9 +209,11 @@ class ChannelService:
         else:
             room_id = await self._transport.create_room(
                 as_identity=identity.mxid, name=name, topic=topic,
-                invitees=invitees, is_direct=is_direct, public=public)
+                invitees=invitees, is_direct=is_direct, public=public, federate=federate,
+                server_acl=server_acl)
         return {"room": room_id, "name": name, "topic": topic, "direct": is_direct,
-                "public": public, "encrypted": encrypted, "invited": invitees}
+                "public": public, "encrypted": encrypted, "federate": federate,
+                "invited": invitees}
 
     async def join(self, identity: ResolvedIdentity, room_id: str) -> dict:
         membership = await self._transport.membership_of(
@@ -216,6 +228,8 @@ class ChannelService:
         if status == 403:
             raise ApiError(403, "forbidden", f"{room_id} is not public and you are not invited")
         _require_success(status, "join")
+        await self._leave_if_denied_members(identity, room_id)
+        identity.mailbox.add_channel(room_id)
         return {**_channel_view(room_id, identity.mailbox.channel(room_id)),
                 "encrypted": await self._is_encrypted(identity, room_id)}
 
@@ -247,6 +261,7 @@ class ChannelService:
         if not is_user_id(user):
             raise ApiError(422, "invalid_user", "user must be a user id (@…:…)")
         await self._membership.require(identity, room_id)
+        self._require_allowed(identity, [user])
         membership = await self._transport.membership_of(
             room_id=room_id, user_id=user, as_identity=identity.mxid)
         if membership == "join":
@@ -274,16 +289,35 @@ class ChannelService:
             room_id=room_id, user_id=user, as_identity=identity.mxid)
         _require_success(status, "remove")
 
-    async def _create_encrypted(self, identity, invitees, name, topic, is_direct, public):
+    async def _create_encrypted(self, identity, invitees, name, topic, is_direct, public, federate,
+                                server_acl):
         engine = await self._engine_if_enabled(identity.mxid)
         if engine is None:
             raise ApiError(
                 501, "e2ee_unavailable", "end-to-end encryption is unavailable for this identity")
         room_id = await engine.create_encrypted_room(
-            invitees=invitees, name=name, topic=topic, is_direct=is_direct, public=public)
+            invitees=invitees, name=name, topic=topic, is_direct=is_direct, public=public,
+            federate=federate, server_acl=server_acl)
         if not room_id:
             raise ApiError(502, "homeserver_error", "the homeserver did not create the channel")
         return room_id
+
+    def _require_allowed(self, identity: ResolvedIdentity, users) -> None:
+        denied = self._federation_policy.denied_among(identity.mxid, users)
+        if denied:
+            raise ApiError(403, "server_not_allowed",
+                           f"{identity.mxid} may not talk to the server of {denied[0]}")
+
+    async def _leave_if_denied_members(self, identity: ResolvedIdentity, room_id: str) -> None:
+        if self._federation_policy.unrestricted(identity.mxid):
+            return
+        members = await self._transport.list_members(room_id=room_id, as_identity=identity.mxid)
+        denied = self._federation_policy.denied_among(identity.mxid, members)
+        if denied:
+            await self._transport.leave_and_forget_room(as_identity=identity.mxid, room_id=room_id)
+            raise ApiError(403, "server_not_allowed",
+                           f"{room_id} has members of servers {identity.mxid} may not talk to, "
+                           f"like {denied[0]}; it left")
 
     async def _engine_if_enabled(self, mxid: str):
         return await self._encryption_for(mxid) if self._e2ee_enabled else None

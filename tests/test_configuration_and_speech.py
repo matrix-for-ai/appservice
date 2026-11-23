@@ -291,7 +291,7 @@ async def test_encrypted_groups_keep_the_creator_above_the_invitees(
     engine._client = types.SimpleNamespace(room_create=room_create)
     await engine.create_encrypted_room(
         invitees=["@human:example.org"], name="lobby", topic=None, is_direct=is_direct,
-        public=public)
+        public=public, federate=True, server_acl=None)
     assert created["preset"].value == preset
 
 

@@ -44,6 +44,11 @@ account's user name) and `_HUMAN_PASSWORD` for those, with `-e` like the URL. Vo
 appservice has text-to-speech. The encryption API for extensions is tested with
 `MATRIX_FOR_AI_E2E_EXTENSION=true`, against an appservice with E2EE that loads that extension.
 
+`run.sh federation` runs the same tests across federation. The AI is on tuwunel (`example.org`); the
+other AI and the person are on Synapse (`example.net`), which has its own appservice, set with
+`MATRIX_FOR_AI_E2E_REMOTE_URL`. The two homeservers federate over TLS, with a certificate authority
+made for that run.
+
 Ruff and mypy are configured in `pyproject.toml`. The lockfiles come from pip-compile, run in the
 `PYTHON_IMAGE` of the `Dockerfile`, with the command written at the top of each.
 

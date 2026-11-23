@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import itertools
 import json
@@ -80,7 +81,8 @@ class MatrixAppserviceTransport:
             return web.json_response(
                 {"errcode": "M_BAD_JSON", "error": "the transaction needs a list of events"},
                 status=400)
-        events_done = self._transaction_log.events_done(transaction_id)
+        transaction_key = _transaction_key(transaction_id, events)
+        events_done = self._transaction_log.events_done(transaction_key)
         if events and events_done == len(events):
             logger.info("transaction %s already handled", transaction_id)
             return web.json_response({})
@@ -88,7 +90,7 @@ class MatrixAppserviceTransport:
         for position in range(events_done, len(events)):
             if self._incoming_event_handler is not None:
                 await self._incoming_event_handler(events[position])
-            self._transaction_log.record_events_done(transaction_id, position + 1)
+            self._transaction_log.record_events_done(transaction_key, position + 1)
         return web.json_response({})
 
     async def _handle_ping(self, request: web.Request) -> web.Response:
@@ -126,9 +128,14 @@ class MatrixAppserviceTransport:
         return body["event_id"]
 
     async def create_room(
-        self, *, as_identity, name, topic, invitees, is_direct, public,
+        self, *, as_identity, name, topic, invitees, is_direct, public, federate, server_acl,
     ) -> str:
         request_body: dict[str, Any] = {"invite": invitees}
+        if not federate:
+            request_body["creation_content"] = {"m.federate": False}
+        if server_acl is not None:
+            request_body["initial_state"] = [
+                {"type": "m.room.server_acl", "state_key": "", "content": server_acl}]
         if public:
             request_body["preset"] = "public_chat"
         elif is_direct:
@@ -362,7 +369,7 @@ class MatrixAppserviceTransport:
             raise HomeserverError(status, body)
         return body.get("joined_rooms", [])
 
-    async def list_invited_rooms(self, *, identity) -> list[str]:
+    async def list_invited_rooms(self, *, identity) -> dict[str, str | None]:
         status, body = await self._request(
             "GET", "/_matrix/client/v3/sync", impersonated_user_id=identity,
             query_parameters={"timeout": 0, "filter": _INVITATIONS_ONLY_FILTER},
@@ -372,7 +379,9 @@ class MatrixAppserviceTransport:
             raise HomeserverError(status, body)
         rooms = body.get("rooms")
         invited = rooms.get("invite") if isinstance(rooms, dict) else None
-        return list(invited) if isinstance(invited, dict) else []
+        if not isinstance(invited, dict):
+            return {}
+        return {room_id: _inviter_of(identity, room) for room_id, room in invited.items()}
 
     async def is_room_encrypted(self, *, room_id, as_identity) -> bool:
         encoded_room_id = quote(room_id, safe="")
@@ -517,3 +526,19 @@ async def _handle_unrecognized(request: web.Request) -> web.Response:
 
 def _current_milliseconds() -> int:
     return int(time.time() * 1000)
+
+
+def _inviter_of(identity: str, invited_room) -> str | None:
+    state = invited_room.get("invite_state") if isinstance(invited_room, dict) else None
+    events = state.get("events") if isinstance(state, dict) else None
+    for event in events if isinstance(events, list) else []:
+        if isinstance(event, dict) and event.get("type") == "m.room.member" \
+                and event.get("state_key") == identity \
+                and isinstance(event.get("sender"), str):
+            return event["sender"]
+    return None
+
+
+def _transaction_key(transaction_id: str, events: list[dict]) -> str:
+    content = json.dumps(events, sort_keys=True, separators=(",", ":"))
+    return f"{transaction_id} {hashlib.sha256(content.encode()).hexdigest()}"

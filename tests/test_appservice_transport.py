@@ -80,7 +80,8 @@ async def test_a_direct_room_is_not_marked_over_account_data_that_failed_to_load
         with pytest.raises(HomeserverError):
             await transport.create_room(
                 as_identity="@ai_nova:example.org", name=None, topic=None,
-                invitees=["@human:example.org"], is_direct=True, public=False)
+                invitees=["@human:example.org"], is_direct=True, public=False, federate=True,
+                server_acl=None)
     assert "PUT" not in requests
 
 
@@ -121,7 +122,12 @@ async def test_the_invited_rooms_come_from_a_sync_without_waiting(aiohttp_server
     async def sync(request):
         seen.append(dict(request.query))
         return web.json_response({"next_batch": "s1", "rooms": {
-            "join": {"!joined:example.org": {}}, "invite": {"!invited:example.org": {}}}})
+            "join": {"!joined:example.org": {}},
+            "invite": {"!invited:example.org": {"invite_state": {"events": [
+                {"type": "m.room.name", "state_key": "", "sender": "@other:example.net"},
+                {"type": "m.room.member", "state_key": "@ai_nova:example.org",
+                 "sender": "@human:example.net", "content": {"membership": "invite"}}]}},
+                       "!unknown_inviter:example.org": {}}}})
     application = web.Application()
     application.router.add_get("/_matrix/client/v3/sync", sync)
     server = await aiohttp_server(application)
@@ -130,8 +136,8 @@ async def test_the_invited_rooms_come_from_a_sync_without_waiting(aiohttp_server
             http_session=session, homeserver_url=str(server.make_url("")).rstrip("/"),
             application_service_token=AS_TOKEN, homeserver_token=HS_TOKEN,
             transaction_log=new_transaction_log())
-        assert await transport.list_invited_rooms(identity="@ai_nova:example.org") == [
-            "!invited:example.org"]
+        assert await transport.list_invited_rooms(identity="@ai_nova:example.org") == {
+            "!invited:example.org": "@human:example.net", "!unknown_inviter:example.org": None}
     assert seen[0]["timeout"] == "0" and seen[0]["user_id"] == "@ai_nova:example.org"
 
 
@@ -186,6 +192,19 @@ async def test_a_transaction_sent_again_is_answered_without_handling_its_events_
     assert (await _push(client, "t1", events)).status == 200
     assert (await _push(client, "t1", events)).status == 200
     assert delivered == ["$1", "$2"]
+
+
+async def test_a_transaction_id_used_again_for_other_events_is_a_new_transaction(
+        aiohttp_client, tmp_path):
+    delivered = []
+
+    async def deliver(event):
+        delivered.append(event["event_id"])
+    client = await _client_over(aiohttp_client, TransactionLog(tmp_path), deliver)
+    assert (await _push(client, "t1", [{"event_id": "$1"}])).status == 200
+    assert (await _push(client, "t1", [{"event_id": "$2"}])).status == 200
+    assert (await _push(client, "t1", [{"event_id": "$2", "room_id": "!other"}])).status == 200
+    assert delivered == ["$1", "$2", "$2"]
 
 
 async def test_a_transaction_that_failed_halfway_resumes_at_the_event_that_failed(

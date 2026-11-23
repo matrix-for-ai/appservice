@@ -32,12 +32,13 @@ class EncryptionEngine(Protocol):
     ) -> dict | None: ...
 
     async def send_event(
-        self, *, room_id: str, event_type: str, content: dict
+        self, *, room_id: str, event_type: str, content: dict,
+        withholds_keys_from: Callable[[str], bool],
     ) -> str | None: ...
 
     async def create_encrypted_room(
         self, *, invitees: list[str], name: str | None, topic: str | None, is_direct: bool,
-        public: bool,
+        public: bool, federate: bool, server_acl: dict | None,
     ) -> str | None: ...
 
     async def sync_once(self, timeout: int = 8000) -> None: ...

@@ -121,7 +121,7 @@ class CryptoEngine:
         async with self._sync_lock:
             return await self._client.sync(**kwargs)
 
-    async def _prepare_send(self, room_id):
+    async def _prepare_send(self, room_id, withholds_keys_from):
         if room_id in self._client.rooms:
             await self._sync(timeout=0)
         else:
@@ -129,8 +129,12 @@ class CryptoEngine:
         client = self._client
         if client.should_query_keys:
             await client.keys_query()
+        withheld = self._withhold_keys(room_id, withholds_keys_from)
         session = client.olm.outbound_group_sessions.get(room_id)
         if session is None:
+            return
+        if any(user_id in withheld for user_id, _device_id in session.users_shared_with):
+            del client.olm.outbound_group_sessions[room_id]
             return
         devices = {
             (user_id, device.id)
@@ -152,8 +156,22 @@ class CryptoEngine:
             return None
         return {**file_keys, "url": content_uri}
 
-    async def send_event(self, *, room_id: str, event_type: str, content: dict) -> str | None:
-        await self._prepare_send(room_id)
+    def _withhold_keys(self, room_id, withholds_keys_from) -> set[str]:
+        withheld = set()
+        for user_id in self._client.rooms[room_id].users:
+            withholds = withholds_keys_from(user_id)
+            if withholds:
+                withheld.add(user_id)
+            for device in self._client.device_store.active_user_devices(user_id):
+                if withholds and not device.blacklisted:
+                    self._client.blacklist_device(device)
+                elif not withholds and device.blacklisted:
+                    self._client.unblacklist_device(device)
+        return withheld
+
+    async def send_event(self, *, room_id: str, event_type: str, content: dict,
+                         withholds_keys_from) -> str | None:
+        await self._prepare_send(room_id, withholds_keys_from)
         response = await self._client.room_send(
             room_id, event_type, content, ignore_unverified_devices=True)
         event_id = getattr(response, "event_id", None)
@@ -163,16 +181,18 @@ class CryptoEngine:
 
     async def create_encrypted_room(
         self, *, invitees: list[str], name: str | None, topic: str | None, is_direct: bool,
-        public: bool,
+        public: bool, federate: bool, server_acl: dict | None,
     ) -> str | None:
         create = await self._client.room_create(
-            name=name, topic=topic, invite=invitees, is_direct=is_direct,
+            name=name, topic=topic, invite=invitees, is_direct=is_direct, federate=federate,
             preset=_preset(is_direct=is_direct, public=public),
             initial_state=[
                 {"type": "m.room.encryption", "state_key": "",
                  "content": {"algorithm": "m.megolm.v1.aes-sha2"}},
                 {"type": "m.room.history_visibility", "state_key": "",
                  "content": {"history_visibility": "invited"}},
+                *([{"type": "m.room.server_acl", "state_key": "", "content": server_acl}]
+                  if server_acl is not None else []),
             ])
         return getattr(create, "room_id", None)
 
