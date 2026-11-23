@@ -52,11 +52,16 @@ async def test_an_extension_puts_room_state(human, ai):
         run = secrets.token_hex(3)
         await _extension(ai, "PUT", "state", json={
             "room": room, "type": STATE, "state_key": ai.mxid, "content": {"run": run}})
-        async with human.session.get(
-                f"{HOMESERVER_URL}/_matrix/client/v3/rooms/{quote(room, safe='')}/state/"
-                f"{STATE}/{quote(ai.mxid, safe='')}",
-                headers={"Authorization": f"Bearer {human.client.access_token}"}) as response:
-            assert response.status == 200, await response.text()
-            assert await response.json() == {"run": run}
+        deadline = time.monotonic() + TIMEOUT_SECONDS
+        while True:
+            async with human.session.get(
+                    f"{HOMESERVER_URL}/_matrix/client/v3/rooms/{quote(room, safe='')}/state/"
+                    f"{STATE}/{quote(ai.mxid, safe='')}",
+                    headers={"Authorization": f"Bearer {human.client.access_token}"}) as response:
+                if response.status == 200 or time.monotonic() > deadline:
+                    assert response.status == 200, await response.text()
+                    assert await response.json() == {"run": run}
+                    return
+            await asyncio.sleep(1)
     finally:
         await leave(room, ai)

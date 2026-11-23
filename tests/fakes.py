@@ -37,17 +37,18 @@ class FakeHomeserver:
         self.media_downloads: list[tuple[str, str]] = []
         self.read_markers: dict[tuple, str] = {}
         self.profiles: dict[str, dict] = {}
+        self.readers: dict[str, set[str]] = {}
         self._ids = itertools.count(1)
 
     def new_id(self, sigil: str) -> str:
         return f"{sigil}{next(self._ids)}:{SERVER}"
 
     def create_room(self, creator: str, invitees, *, encrypted: bool, name=None,
-                    public=False) -> str:
+                    public=False, federate=True, server_acl=None) -> str:
         room_id = self.new_id("!")
         self.rooms[room_id] = {
             "encrypted": encrypted, "members": {creator}, "invited": set(invitees), "name": name,
-            "public": public}
+            "public": public, "creator": creator, "federate": federate, "server_acl": server_acl}
         return room_id
 
     def add_event(self, room_id: str, sender: str, event_type: str, content: dict,
@@ -96,8 +97,10 @@ class FakeTransport:
     async def send_event(self, *, room_id, event_type, content, as_identity):
         return self.hs.add_event(room_id, as_identity, event_type, content)["event_id"]
 
-    async def create_room(self, *, as_identity, name, topic, invitees, is_direct, public):
-        return self.hs.create_room(as_identity, invitees, encrypted=False, name=name, public=public)
+    async def create_room(self, *, as_identity, name, topic, invitees, is_direct, public, federate,
+                          server_acl):
+        return self.hs.create_room(as_identity, invitees, encrypted=False, name=name, public=public,
+                                   federate=federate, server_acl=server_acl)
 
     async def join_room(self, *, room_id, as_identity=None):
         room = self.hs.rooms.get(room_id)
@@ -212,7 +215,15 @@ class FakeTransport:
 
     async def list_invited_rooms(self, *, identity):
         self._answer_or_fail("list_invited_rooms")
-        return [room_id for room_id, room in self.hs.rooms.items() if identity in room["invited"]]
+        return {room_id: self._inviter(room_id, identity)
+                for room_id, room in self.hs.rooms.items() if identity in room["invited"]}
+
+    def _inviter(self, room_id, identity):
+        invitations = [event["sender"] for event in self.hs.events.values()
+                       if event["room_id"] == room_id and event["type"] == "m.room.member"
+                       and event.get("state_key") == identity
+                       and event["content"].get("membership") == "invite"]
+        return invitations[-1] if invitations else self.hs.rooms[room_id]["creator"]
 
     async def is_room_encrypted(self, *, room_id, as_identity):
         return self.hs.rooms[room_id]["encrypted"]
@@ -268,14 +279,21 @@ class FakeEngine:
         return {"url": content_uri, "key": {"k": "fake"}, "iv": "fake",
                 "hashes": {"sha256": "fake"}, "v": "v2"}
 
-    async def send_event(self, *, room_id, event_type, content):
+    async def send_event(self, *, room_id, event_type, content, withholds_keys_from):
         encrypted = {"ciphertext": json.dumps({"type": event_type, "content": content})}
         if "m.relates_to" in content:
             encrypted["m.relates_to"] = content["m.relates_to"]
-        return self.hs.add_event(room_id, self.mxid, "m.room.encrypted", encrypted)["event_id"]
+        event_id = self.hs.add_event(
+            room_id, self.mxid, "m.room.encrypted", encrypted)["event_id"]
+        room = self.hs.rooms[room_id]
+        self.hs.readers[event_id] = {
+            user for user in room["members"] | room["invited"] if not withholds_keys_from(user)}
+        return event_id
 
-    async def create_encrypted_room(self, *, invitees, name, topic, is_direct, public):
-        return self.hs.create_room(self.mxid, invitees, encrypted=True, name=name, public=public)
+    async def create_encrypted_room(self, *, invitees, name, topic, is_direct, public, federate,
+                                    server_acl):
+        return self.hs.create_room(self.mxid, invitees, encrypted=True, name=name, public=public,
+                                   federate=federate, server_acl=server_acl)
 
 
 class FakeEncryptionRegistry:

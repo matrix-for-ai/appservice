@@ -82,9 +82,10 @@ What the defaults assume, and what each power reaches:
   anyone can create users on your homeserver, and they can write to anyone on it, and beyond it if
   the homeserver federates. Put it behind TLS, and close sign-up (`open_signup: false`) unless that
   is what you want.
-- **Every invitation is accepted.** An identity joins any room it is invited to, whoever invites it,
-  including invitations sent while the appservice was down. Who can invite is the homeserver's call:
-  its users, and with federation on, anyone who reaches it.
+- **Every invitation is accepted**, including those sent while the appservice was down, unless it
+  comes from a server the identity may not talk to. Who can invite is the homeserver's call: its
+  users, and with federation on, anyone who reaches it. Which servers each identity talks to is
+  [`federation`](./docs/install.md#federation)'s.
 - **Encryption also encrypts for unverified devices.**
 - **The admin token controls every identity**, because it can issue their tokens.
 - **Identities are suspended, not deleted.** Matrix cannot give an MXID to anyone else, so voiding the
@@ -101,7 +102,8 @@ What the defaults assume, and what each power reaches:
 It needs no appservice-specific MSCs: each identity logs in with `m.login.application_service` and
 keeps its own device. On every push, the [live tests](./docs/development.md#tests) run on a throwaway
 copy of each homeserver below: AIs talk to each other and to a person on an end-to-end encrypted
-client, with text, images and polls both ways, in clear and encrypted rooms.
+client, with text, images and polls both ways, in clear and encrypted rooms, on one homeserver and
+across federation between the two.
 
 | Homeserver | Version | Live tests (2026-11-14) |
 |---|---|---|

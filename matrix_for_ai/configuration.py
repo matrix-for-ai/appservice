@@ -7,12 +7,15 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .ports.speech import SpeechServiceConfiguration
+from .services.federation_policy import (
+    DENIED_MEMBERS_MODES, FederationConfiguration, FederationRule, ServerRule)
 from .services.webhook_notifier import parsed_target
 
 
 _ENV_PLACEHOLDER_PATTERN = re.compile(r"\$\{(\w+)\}")
 _LISTEN_PATTERN = re.compile(r"(?P<host>[^:]*):(?P<port>\d+)")
 _SERVER_NAME_PATTERN = re.compile(r"[A-Za-z0-9.\-]+(:\d+)?")
+_SERVER_GLOB_PATTERN = re.compile(r"[A-Za-z0-9.\-*?]+")
 _PLACEHOLDER_MARK = "CHANGE_ME"
 _MINIMUM_SECRET_LENGTH = 32
 _HOW_TO_GENERATE = "generate one with: openssl rand -hex 32"
@@ -44,6 +47,7 @@ class Configuration:
     stt: SpeechServiceConfiguration | None
     limits: Limits
     extensions: dict = field(default_factory=dict)
+    federation: FederationConfiguration = field(default_factory=FederationConfiguration)
     open_signup: bool = True
 
 
@@ -75,6 +79,7 @@ def parse_configuration(raw) -> Configuration:
     speech = reader.section("speech", required=False)
     webhooks = reader.section("webhooks", required=False)
     limits = reader.section("limits", required=False)
+    federation = reader.section("federation", required=False)
     listen_host, listen_port = reader.address("listen", default="0.0.0.0:7700")
     appservice_host, appservice_port = reader.address("appservice_listen", default="127.0.0.1:7701")
     if appservice_port == listen_port:
@@ -113,6 +118,7 @@ def parse_configuration(raw) -> Configuration:
             media_bytes=limits.limit("media_bytes", default=Limits.media_bytes),
         ),
         open_signup=reader.boolean("open_signup", default=True),
+        federation=federation.federation(server_name),
     )
     reader.reject_unknown()
     return configuration
@@ -223,6 +229,43 @@ class _Reader:
             info_url=service.url("info_url", default=""),
         )
         return configuration if url else None
+
+    def federation(self, server_name: str) -> FederationConfiguration:
+        default = self._federation_rule(FederationRule())
+        identities_reader = self.section("identities", required=False)
+        identities = {}
+        for mxid in identities_reader.names():
+            localpart, _, server = mxid[1:].partition(":")
+            if not mxid.startswith("@") or not localpart or server != server_name:
+                raise ConfigurationError(
+                    f"{identities_reader._name(mxid)} must be the user id of an identity of "
+                    f"{server_name}, like @ai_name_abc123:{server_name}")
+            identities[mxid] = identities_reader.section(mxid)._federation_rule(default)
+        return FederationConfiguration(default=default, identities=identities)
+
+    def names(self) -> list[str]:
+        self._known.update(self._raw)
+        return list(self._raw)
+
+    def _federation_rule(self, inherited: FederationRule) -> FederationRule:
+        servers = inherited.servers
+        if self.value("servers") is not None:
+            section = self.section("servers")
+            servers = ServerRule(allow=section.server_globs("allow", default=["*"]),
+                                 deny=section.server_globs("deny", default=[]))
+        denied_members = self.value("denied_members", default=inherited.denied_members)
+        if denied_members not in DENIED_MEMBERS_MODES:
+            raise ConfigurationError(
+                f"{self._name('denied_members')} must be one of {', '.join(DENIED_MEMBERS_MODES)}")
+        return FederationRule(servers=servers, denied_members=denied_members)
+
+    def server_globs(self, key: str, *, default: list) -> tuple[str, ...]:
+        value = self.value(key, default=default)
+        if not isinstance(value, list) or not all(
+                isinstance(item, str) and _SERVER_GLOB_PATTERN.fullmatch(item) for item in value):
+            raise ConfigurationError(
+                f"{self._name(key)} must be a list of server names, where * and ? are wildcards")
+        return tuple(value)
 
     def reject_unknown(self) -> None:
         unknown = sorted(set(self._raw) - self._known)

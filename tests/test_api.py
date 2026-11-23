@@ -174,7 +174,8 @@ async def test_clear_room_round_trip_reads_without_side_effects_until_the_receip
     room = created["room"]
     assert response.headers["Location"] == f"channels/{quote(room, safe='')}"
     assert created == {"room": room, "name": "lobby", "topic": None, "direct": False,
-                       "public": False, "encrypted": False, "invited": [HUMAN]}
+                       "public": False, "encrypted": False, "federate": True,
+                       "invited": [HUMAN]}
     await appservice.join(room, mxid)
 
     sent = await appservice.client.post(
@@ -696,7 +697,7 @@ async def test_incoming_encrypted_audio_is_transcribed_with_the_stt_profile(make
     encrypted_file = await engine.upload_encrypted(data=b"opus", mime_type="audio/ogg", filename="v")
     event_id = await engine.send_event(room_id=room, event_type="m.room.message", content={
         "msgtype": "m.audio", "body": "nota.ogg", "file": encrypted_file,
-        "info": {"mimetype": "audio/ogg"}})
+        "info": {"mimetype": "audio/ogg"}}, withholds_keys_from=lambda _user: False)
     await appservice.push(appservice.hs.events[event_id])
     message = (await unread_events(appservice, room, auth, "?include=media"))["events"][0]
     assert message["content"]["transcript"] == "buenos días"

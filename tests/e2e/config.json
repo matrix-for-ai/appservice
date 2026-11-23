@@ -13,6 +13,7 @@
   "appservice_listen": "0.0.0.0:7701",
   "admin_token": "${AI_API_ADMIN_TOKEN}",
   "extensions": {"encryption_extension": {}},
+  "federation": {"servers": {"allow": ["*"], "deny": ["blocked.invalid"]}},
   "webhooks": {
     "allowed_targets": [
       "10.0.0.0/8:*",

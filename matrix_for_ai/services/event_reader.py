@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from ..ports.encryption import EncryptedFile, EncryptionEngine
 from ..ports.matrix_transport import HomeserverError, MatrixTransport, MediaTooLarge, MediaUri
 from ..ports.speech import SpeechUnavailable, Transcriber
+from .federation_policy import FederationPolicy
 from .identity_registry import IdentityRegistry
 from .message_content import (
     POLL_END_TYPES, POLL_START_KEYS, Location, Malformed, Media, Message, NotAMessage, Poll,
@@ -57,9 +58,11 @@ class KeysReceivedOnce:
 class EventReader:
     def __init__(
         self, *, transport: MatrixTransport, identity_registry: IdentityRegistry,
-        transcriber: Transcriber | None = None, max_media_bytes: int | None = None,
+        federation_policy: FederationPolicy, transcriber: Transcriber | None = None,
+        max_media_bytes: int | None = None,
     ) -> None:
         self._transport = transport
+        self._federation_policy = federation_policy
         self._max_media_bytes = max_media_bytes
         self._identity_registry = identity_registry
         self._transcriber = transcriber
@@ -73,6 +76,8 @@ class EventReader:
         return await self.record_of(raw, room_id, mxid, engine)
 
     async def record_of(self, raw: dict, room_id, mxid, engine: EncryptionEngine | None):
+        if self._federation_policy.ignores(mxid, raw.get("sender") or ""):
+            return SKIP_EVENT
         base = {
             "event_id": raw.get("event_id"), "room": room_id,
             "sender": raw.get("sender"), "ts": raw.get("origin_server_ts"),
@@ -229,7 +234,7 @@ class EventReader:
     async def _message_of(self, mxid, room_id, event_id, engine) -> Message | None:
         raw = await self._transport.fetch_event(
             room_id=room_id, event_id=event_id, as_identity=mxid)
-        if not raw:
+        if not raw or self._federation_policy.ignores(mxid, raw.get("sender") or ""):
             return None
         inner_type, content = await self._type_and_content(raw, room_id, engine)
         return None if inner_type is None else parse_message(inner_type, content)

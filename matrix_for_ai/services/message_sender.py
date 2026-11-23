@@ -7,6 +7,7 @@ from ..ports.encryption import EncryptionEngine, EncryptionFor
 from ..ports.matrix_transport import MatrixTransport
 from ..ports.speech import SpeechUnavailable, Synthesizer, VoiceMessage
 from .channel_membership import ChannelMembership
+from .federation_policy import FederationPolicy
 from .identity_registry import ResolvedIdentity
 from .image_types import decoded_image
 from .profiles import ProfileService, validated_options
@@ -22,9 +23,10 @@ class MessageSender:
     def __init__(
         self, *, transport: MatrixTransport, membership: ChannelMembership,
         profiles: ProfileService, encryption_for: EncryptionFor, speech_limit: RateLimit,
-        synthesizer: Synthesizer | None = None,
+        federation_policy: FederationPolicy, synthesizer: Synthesizer | None = None,
     ) -> None:
         self._transport = transport
+        self._federation_policy = federation_policy
         self._membership = membership
         self._profiles = profiles
         self._encryption_for = encryption_for
@@ -161,12 +163,29 @@ class _Route:
         self.encrypted = await self._sender._transport.is_room_encrypted(
             room_id=self.room_id, as_identity=self.mxid)
         if not self.encrypted:
+            await self._refuse_denied_members()
             return
         self.engine = await self._sender._encryption_for(self.mxid)
         if self.engine is None:
             raise ApiError(
                 501, "e2ee_unavailable",
                 "the channel is encrypted but end-to-end encryption is unavailable")
+
+    async def _refuse_denied_members(self) -> None:
+        policy = self._sender._federation_policy
+        if policy.unrestricted(self.mxid) or policy.rule_for(self.mxid).denied_members == "allow":
+            return
+        members = await self._sender._transport.list_members(
+            room_id=self.room_id, as_identity=self.mxid)
+        denied = policy.denied_among(self.mxid, members)
+        if denied:
+            raise ApiError(
+                403, "server_not_allowed",
+                f"{self.room_id} is not encrypted and has members of servers {self.mxid} may not "
+                f"talk to, like {denied[0]}")
+
+    def withholds_keys_from(self, user_id: str) -> bool:
+        return self._sender._federation_policy.ignores(self.mxid, user_id)
 
     async def upload(self, data: bytes, mimetype: str, filename: str) -> dict:
         if self.engine is not None:
@@ -185,7 +204,8 @@ class _Route:
                 room_id=self.room_id, event_type=event_type, content=content,
                 as_identity=self.mxid)
         event_id = await self.engine.send_event(
-            room_id=self.room_id, event_type=event_type, content=content)
+            room_id=self.room_id, event_type=event_type, content=content,
+            withholds_keys_from=self.withholds_keys_from)
         if not event_id:
             raise ApiError(502, "homeserver_error", "the homeserver did not accept the event")
         return event_id

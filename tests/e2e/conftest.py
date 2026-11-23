@@ -8,6 +8,7 @@ from live import (
     HOMESERVER_URL,
     HUMAN_PASSWORD,
     HUMAN_USER,
+    REMOTE_URL,
     Human,
     register_identity,
     wait_until_homeserver_reaches_appservice,
@@ -18,14 +19,16 @@ from nio import AsyncClient, AsyncClientConfig, LoginResponse
 @pytest.fixture(scope="session", autouse=True)
 def homeserver_reaches_appservice():
     if BASE_URL:
-        wait_until_homeserver_reaches_appservice()
+        for base_url in {BASE_URL, REMOTE_URL}:
+            wait_until_homeserver_reaches_appservice(base_url)
 
 
 @pytest.fixture
 async def pair():
     async with aiohttp.ClientSession() as session:
         run = secrets.token_hex(3)
-        yield [await register_identity(session, role, run) for role in ("alice", "bob")]
+        yield [await register_identity(session, "alice", run),
+               await register_identity(session, "bob", run, REMOTE_URL)]
 
 
 @pytest_asyncio.fixture(loop_scope="session")

@@ -22,6 +22,7 @@ from .services.channel_membership import ChannelMembership
 from .services.channels import ChannelService
 from .services.event_reader import EventReader
 from .services.identity_registry import IdentityRegistry
+from .services.federation_policy import FederationPolicy
 from .services.incoming_event_router import IncomingEventRouter
 from .services.message_sender import MessageSender
 from .services.profiles import ProfileService
@@ -68,6 +69,8 @@ def compose(
         server_name=configuration.server_name,
     )
     identity_registry.load()
+    federation_policy = FederationPolicy(
+        server_name=configuration.server_name, configuration=configuration.federation)
 
     async def encryption_for(mxid: str) -> EncryptionEngine | None:
         if encryption is None:
@@ -93,7 +96,7 @@ def compose(
         own_ports=(configuration.listen_port, configuration.appservice_listen_port))
     event_router = IncomingEventRouter(
         identity_registry=identity_registry, transport=transport,
-        webhook_notifier=webhook_notifier)
+        federation_policy=federation_policy, webhook_notifier=webhook_notifier)
     transport.set_incoming_event_handler(event_router.route)
     limits = configuration.limits
     profiles = ProfileService(
@@ -101,7 +104,8 @@ def compose(
         max_media_bytes=limits.media_bytes)
     membership = ChannelMembership(transport=transport)
     event_reader = EventReader(
-        transport=transport, identity_registry=identity_registry, transcriber=transcriber,
+        transport=transport, identity_registry=identity_registry,
+        federation_policy=federation_policy, transcriber=transcriber,
         max_media_bytes=limits.media_bytes)
     push_reachability = PushReachability(
         transport=transport, appservice_id=configuration.appservice_id,
@@ -113,10 +117,12 @@ def compose(
         channels=ChannelService(
             transport=transport, membership=membership, event_reader=event_reader,
             event_router=event_router,
-            encryption_for=encryption_for, e2ee_enabled=encryption is not None),
+            encryption_for=encryption_for, e2ee_enabled=encryption is not None,
+            federation_policy=federation_policy),
         sender=MessageSender(
             transport=transport, membership=membership, profiles=profiles,
             encryption_for=encryption_for, synthesizer=synthesizer,
+            federation_policy=federation_policy,
             speech_limit=per_minute(limits.speech_per_minute, "voice messages")),
         profiles=profiles,
         webhook_notifier=webhook_notifier,
@@ -218,6 +224,7 @@ async def run(configuration: Configuration) -> None:
         await stop.wait()
         logger.info("shutting down")
     finally:
+        await event_router.close()
         if encryption is not None:
             await encryption.close_all()
         for runner in runners:

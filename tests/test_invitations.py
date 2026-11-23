@@ -1,9 +1,10 @@
 import asyncio
 from urllib.parse import quote
 
-from fakes import PUSH_CHECK
+from fakes import HS_TOKEN, PUSH_CHECK
 from matrix_for_ai.__main__ import _catch_up_when_homeserver_ready
-from matrix_for_ai.ports.matrix_transport import PushCheck
+from matrix_for_ai.ports.matrix_transport import HomeserverError, PushCheck
+from matrix_for_ai.services import incoming_event_router
 from matrix_for_ai.services.push_reachability import PushReachability
 from test_api import HUMAN
 
@@ -139,3 +140,48 @@ async def test_without_a_visible_invitation_the_unread_starts_after_the_earlier_
     await appservice.event_router.accept_pending_invitations()
     assert [content.get("text") for _type, _sender, content in
             await _unread(appservice, room, auth)] == ["gap"]
+
+
+async def test_the_transaction_is_acknowledged_before_the_invitation_is_accepted(
+        make_appservice):
+    appservice = await make_appservice(e2ee=False)
+    mxid, _auth = await appservice.register("nova")
+    room = appservice.hs.create_room(HUMAN, [], encrypted=False)
+    invite = _invite(appservice, room, mxid)
+    join_requested, release = asyncio.Event(), asyncio.Event()
+    join_room = appservice.transport.join_room
+
+    async def join_after_the_acknowledgement(**kwargs):
+        join_requested.set()
+        await release.wait()
+        return await join_room(**kwargs)
+    appservice.transport.join_room = join_after_the_acknowledgement
+    response = await appservice.push_client.put(
+        "/_matrix/app/v1/transactions/t1", json={"events": [invite]},
+        headers={"Authorization": f"Bearer {HS_TOKEN}"})
+    assert response.status == 200
+    await join_requested.wait()
+    assert mxid not in appservice.hs.rooms[room]["members"]
+    release.set()
+    await appservice.event_router.wait_for_memberships()
+    assert mxid in appservice.hs.rooms[room]["members"]
+
+
+async def test_a_join_that_fails_is_retried(make_appservice, monkeypatch):
+    monkeypatch.setattr(incoming_event_router, "MEMBERSHIP_RETRY_DELAYS_SECONDS", (0, 0))
+    appservice = await make_appservice(e2ee=False)
+    mxid, _auth = await appservice.register("nova")
+    room = appservice.hs.create_room(HUMAN, [], encrypted=False)
+    answers = [403, HomeserverError(None)]
+    join_room = appservice.transport.join_room
+
+    async def join_on_the_third_attempt(**kwargs):
+        if answers:
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return await join_room(**kwargs)
+    appservice.transport.join_room = join_on_the_third_attempt
+    await appservice.push(_invite(appservice, room, mxid))
+    assert answers == [] and mxid in appservice.hs.rooms[room]["members"]

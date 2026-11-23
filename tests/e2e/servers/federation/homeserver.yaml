@@ -1,0 +1,31 @@
+server_name: example.net
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 6167
+    type: http
+    bind_addresses: ["0.0.0.0"]
+    resources:
+      - names: [client]
+  - port: 8448
+    type: http
+    tls: true
+    bind_addresses: ["0.0.0.0"]
+    resources:
+      - names: [federation]
+tls_certificate_path: /certificates/example.net.pem
+tls_private_key_path: /certificates/example.net.key
+federation_custom_ca_list:
+  - /certificates/ca.pem
+ip_range_blacklist: []
+database:
+  name: sqlite3
+  args:
+    database: /data/homeserver.db
+media_store_path: /data/media_store
+signing_key_path: /data/signing.key
+trusted_key_servers: []
+suppress_key_server_warning: true
+report_stats: false
+registration_shared_secret: e2e-registration-secret-for-tests-only
+app_service_config_files:
+  - /config/registration.yaml

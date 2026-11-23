@@ -1,10 +1,11 @@
 import base64
+import json
 from urllib.parse import quote
 
 import aiohttp
 import pytest
 
-from live import BASE_URL, PNG, Identity, leave
+from live import BASE_URL, PNG, REMOTE_URL, Identity, leave
 
 pytestmark = pytest.mark.skipif(
     not BASE_URL, reason="set MATRIX_FOR_AI_E2E_URL to run against a running appservice")
@@ -100,3 +101,38 @@ async def test_voice_round_trip(pair):
         await leave(room, alice, bob)
 
 
+
+
+async def test_a_server_the_identity_may_not_talk_to_is_refused_before_reaching_matrix(pair):
+    alice, _bob = pair
+    refused = await alice.call("POST", "/channels", expect=403, json={
+        "name": "e2e refused", "invite": ["@someone:blocked.invalid"], "direct": False})
+    assert json.loads(refused)["code"] == "server_not_allowed"
+
+
+async def test_a_channel_the_identity_creates_carries_its_server_acl(pair):
+    alice, bob = pair
+    created = await alice.call("POST", "/channels", expect=201, json={
+        "name": "e2e acl", "invite": [bob.mxid], "direct": False, "encrypted": False})
+    try:
+        assert created["federate"]
+        await _converse(alice, bob, created["room"], encrypted=False)
+    finally:
+        await leave(created["room"], alice, bob)
+
+
+@pytest.mark.skipif(REMOTE_URL == BASE_URL, reason="needs an appservice on another homeserver")
+async def test_a_channel_that_does_not_federate_keeps_other_servers_out(pair):
+    alice, bob = pair
+    created = await alice.call("POST", "/channels", expect=201, json={
+        "name": "e2e local", "public": True, "federate": False, "direct": False,
+        "encrypted": False})
+    try:
+        assert created["federate"] is False
+        async with bob.session.put(
+                f"{bob.base_url}/channels/{quote(created['room'], safe='')}",
+                headers=bob.headers) as response:
+            refusal = (response.status, (await response.json())["code"])
+        assert refusal in [(403, "forbidden"), (404, "channel_not_found")], refusal
+    finally:
+        await leave(created["room"], alice)

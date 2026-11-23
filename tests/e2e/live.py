@@ -13,6 +13,7 @@ from nio import (AsyncClient, EncryptionError, MegolmEvent, RoomCreateResponse, 
 from nio.crypto import decrypt_attachment
 
 BASE_URL = os.environ.get("MATRIX_FOR_AI_E2E_URL", "").rstrip("/")
+REMOTE_URL = os.environ.get("MATRIX_FOR_AI_E2E_REMOTE_URL", "").rstrip("/") or BASE_URL
 HOMESERVER_URL = os.environ.get("MATRIX_FOR_AI_E2E_HOMESERVER", "").rstrip("/")
 HUMAN_USER = os.environ.get("MATRIX_FOR_AI_E2E_HUMAN", "")
 HUMAN_PASSWORD = os.environ.get("MATRIX_FOR_AI_E2E_HUMAN_PASSWORD", "")
@@ -26,15 +27,17 @@ ENCRYPTION_STATE = {"type": "m.room.encryption", "state_key": "",
 
 
 class Identity:
-    def __init__(self, session: aiohttp.ClientSession, mxid: str, token: str) -> None:
+    def __init__(self, session: aiohttp.ClientSession, mxid: str, token: str,
+                 base_url: str = BASE_URL) -> None:
         self.session = session
         self.mxid = mxid
         self.token = token
+        self.base_url = base_url
         self.headers = {"Authorization": f"Bearer {token}"}
 
     async def call(self, method: str, path: str, expect: int = 200, **kwargs):
         async with self.session.request(
-                method, BASE_URL + path, headers=self.headers, **kwargs) as response:
+                method, self.base_url + path, headers=self.headers, **kwargs) as response:
             body = await response.read()
             assert response.status == expect, f"{method} {path} -> {response.status}: {body[:300]!r}"
             if response.content_type == "application/json":
@@ -178,11 +181,11 @@ async def leave(room: str, *identities: Identity) -> None:
         await identity.call("DELETE", f"/channels/{quote(room, safe='')}", expect=204)
 
 
-def wait_until_homeserver_reaches_appservice() -> None:
+def wait_until_homeserver_reaches_appservice(base_url: str = BASE_URL) -> None:
     deadline = time.monotonic() + READY_TIMEOUT_SECONDS
     while True:
         try:
-            with urllib.request.urlopen(f"{BASE_URL}/health/push"):
+            with urllib.request.urlopen(f"{base_url}/health/push"):
                 return
         except (urllib.error.URLError, ConnectionError):
             if time.monotonic() > deadline:
@@ -190,11 +193,10 @@ def wait_until_homeserver_reaches_appservice() -> None:
             time.sleep(1)
 
 
-async def register_identity(session: aiohttp.ClientSession, role: str, run: str) -> Identity:
+async def register_identity(session: aiohttp.ClientSession, role: str, run: str,
+                            base_url: str = BASE_URL) -> Identity:
     async with session.post(
-            f"{BASE_URL}/identities", json={"name": f"e2e_{role}_{run}"}) as response:
+            f"{base_url}/identities", json={"name": f"e2e_{role}_{run}"}) as response:
         assert response.status == 201, await response.text()
         body = await response.json()
-    return Identity(session, body["mxid"], body["api_token"])
-
-
+    return Identity(session, body["mxid"], body["api_token"], base_url)

@@ -34,6 +34,7 @@ class RunningAppservice:
             "/_matrix/app/v1/transactions/t1", json={"events": list(events)},
             headers={"Authorization": f"Bearer {HS_TOKEN}"})
         assert response.status == 200
+        await self.event_router.wait_for_memberships()
 
     async def deliver(self, room_id, sender, event_type, content) -> dict:
         event = self.hs.add_event(room_id, sender, event_type, content)
